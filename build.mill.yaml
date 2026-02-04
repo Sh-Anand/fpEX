@@ -5,7 +5,10 @@ repositories:
   - https://oss.sonatype.org/content/repositories/releases
 mvnDeps:
   - org.chipsalliance::chisel:6.6.0
+scalacPluginMvnDeps:
+  - org.chipsalliance:chisel-plugin_2.13.12:6.6.0
 scalacOptions:
   - -deprecation
   - -feature
   - -unchecked
+mainClass: fpex.Main

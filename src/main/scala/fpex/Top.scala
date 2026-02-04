@@ -12,6 +12,9 @@ class Top extends Module {
   io.out := io.in
 }
 
-object Elaborate extends App {
-  circt.stage.ChiselStage.emitSystemVerilog(new Top)
+object Main extends App {
+  circt.stage.ChiselStage.emitSystemVerilogFile(
+    new Top,
+    Array("--target-dir", "generated")
+  )
 }
