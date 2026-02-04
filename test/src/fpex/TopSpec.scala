@@ -7,6 +7,6 @@ class FPEXSpec extends AnyFlatSpec with ChiselScalatestTester {
   behavior of "FPEX"
 
   it should "elaborate with default parameters" in {
-    test(new FPEX()) { _ => }
+    test(new FPEX(FPFormat.FP32)) { _ => }
   }
 }
