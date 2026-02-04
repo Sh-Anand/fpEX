@@ -20,3 +20,17 @@ object FPFormat extends ChiselEnum {
   val BF16 = Value("b100".U)
   val _w   = Value("b111".U)
 }
+
+trait HasFPEXParams {
+  def numFP16Lanes = 4
+  def tagWidth = 8
+
+  def getExpSigWidth(fmt: FPFormat.Type): (Int, Int) = {
+    fmt match {
+      case FPFormat.FP32 => (8, 24)
+      case FPFormat.FP16 => (5, 11)
+      case FPFormat.BF16 => (8, 8)
+      case _ => (8, 8)
+    }
+  }
+}

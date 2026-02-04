@@ -18,14 +18,17 @@ class FPEXResp(numFP16Lanes: Int = 4, tagWidth: Int = 1) extends Bundle {
   val result = UInt((numFP16Lanes * 16).W)
 }
 
-class FPEX(numFP16Lanes: Int = 4, tagWidth: Int = 1) extends Module {
+class FPEX(numFP16Lanes: Int = 4, tagWidth: Int = 1)
+  extends Module
+  with HasFPEXParams {
   val io = IO(new Bundle {
     val req = Flipped(Decoupled(new FPEXReq(numFP16Lanes, tagWidth)))
     val resp = Decoupled(new FPEXResp(numFP16Lanes, tagWidth))
   })
 
+  val (expWidth, sigWidth) = getExpSigWidth(io.req.bits.fmt)
   val recFNx = Wire(UInt((numFP16Lanes * 16).W))
-  recFNx := recFNFromFN(5, 11, io.req.bits.x)
+  recFNx := recFNFromFN(expWidth, sigWidth, io.req.bits.x)
 
   io.req.ready := false.B
   io.resp.valid := false.B
