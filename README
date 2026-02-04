@@ -1,0 +1,6 @@
+Vector fp exponentiation module in chisel
+
+`./mill compile` compiles
+`./mill run` generates verilog in generated/*.v
+`./mill test` runs the test bench
+`./mill clean` to clean stale configs if you change anything
