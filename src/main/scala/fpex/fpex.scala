@@ -27,6 +27,7 @@ object FPEXState extends ChiselEnum {
 class FPEXReq(wordWidth: Int, numLanes: Int, tagWidth: Int) extends Bundle {
   val roundingMode = FPRoundingMode()
   val tag = UInt(tagWidth.W)
+  val neg = Bool() // 0 = e^x, 1 = e^-x
   val laneMask = UInt(numLanes.W)
   val x = Vec(numLanes, UInt(wordWidth.W))
 }
@@ -47,6 +48,7 @@ class FPEX(fmt: FPFormat.Type, numLanes: Int = 4, tagWidth: Int = 1)
   })
 
   val state = RegInit(FPEXState.READY)
+  val req = Reg(new FPEXReq(wordWidth, numLanes, tagWidth))
   val recFnX = VecInit(io.req.bits.x.map(x => recFNFromFN(expWidth, sigWidth, x)))
 
   io.req.ready := state === FPEXState.READY
@@ -57,6 +59,7 @@ class FPEX(fmt: FPFormat.Type, numLanes: Int = 4, tagWidth: Int = 1)
 
   when (io.req.fire) {
     state := FPEXState.BUSY
+    req := io.req.bits
   }.elsewhen(io.resp.fire) {
     state := FPEXState.READY
   }
