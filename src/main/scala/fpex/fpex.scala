@@ -2,6 +2,7 @@ package main.scala.fpex
 
 import chisel3._
 import chisel3.util._
+import main.scala.hardfloat._
 
 class FPEXReq(numFP16Lanes: Int = 4, tagWidth: Int = 1) extends Bundle {
   val fmt = FPFormat()
@@ -23,9 +24,12 @@ class FPEX(numFP16Lanes: Int = 4, tagWidth: Int = 1) extends Module {
     val resp = Decoupled(new FPEXResp(numFP16Lanes, tagWidth))
   })
 
+  val recFNx = Wire(UInt((numFP16Lanes * 16).W))
+  recFNx := recFNFromFN(5, 11, io.req.bits.x)
+
   io.req.ready := false.B
   io.resp.valid := false.B
   io.resp.bits.tag := 0.U
-  io.resp.bits.result := 0.U
+  io.resp.bits.result := recFNx
   io.resp.bits.laneMask := 0.U
 }
