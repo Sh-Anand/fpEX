@@ -1,17 +1,12 @@
-package fpex
+package main.scala.fpex
 
-import chisel3._
 import chiseltest._
 import org.scalatest.flatspec.AnyFlatSpec
 
-class TopSpec extends AnyFlatSpec with ChiselScalatestTester {
-  behavior of "Top"
+class FPEXSpec extends AnyFlatSpec with ChiselScalatestTester {
+  behavior of "FPEX"
 
-  it should "pass a simple sanity check" in {
-    test(new Top) { dut =>
-      dut.io.in.poke(3.U)
-      dut.clock.step()
-      dut.io.out.expect(3.U)
-    }
+  it should "elaborate with default parameters" in {
+    test(new FPEX()) { _ => }
   }
 }
