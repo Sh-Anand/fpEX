@@ -18,6 +18,12 @@ trait HasFPEXParams {
   }
 }
 
+object FPEXState extends ChiselEnum {
+  val READY = 0.U
+  val BUSY = 1.U
+  val DONE = 2.U
+}
+
 class FPEXReq(wordWidth: Int, numLanes: Int, tagWidth: Int) extends Bundle {
   val roundingMode = FPRoundingMode()
   val tag = UInt(tagWidth.W)
@@ -40,11 +46,18 @@ class FPEX(fmt: FPFormat.Type, numLanes: Int = 4, tagWidth: Int = 1)
     val resp = Decoupled(new FPEXResp(wordWidth, numLanes, tagWidth))
   })
 
+  val state = RegInit(FPEXState.READY)
   val recFnX = VecInit(io.req.bits.x.map(x => recFNFromFN(expWidth, sigWidth, x)))
 
-  io.req.ready := false.B
-  io.resp.valid := false.B
+  io.req.ready := state === FPEXState.READY
+  io.resp.valid := state === FPEXState.DONE
   io.resp.bits.tag := 0.U
   io.resp.bits.result := recFnX
   io.resp.bits.laneMask := 0.U
+
+  when (io.req.fire) {
+    state := FPEXState.BUSY
+  }.elsewhen(io.resp.fire) {
+    state := FPEXState.READY
+  }
 }
