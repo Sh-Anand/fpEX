@@ -1,0 +1,11 @@
+extends: ScalaModule
+scalaVersion: 2.13.12
+repositories:
+  - https://repo1.maven.org/maven2
+  - https://oss.sonatype.org/content/repositories/releases
+mvnDeps:
+  - org.chipsalliance::chisel:6.6.0
+scalacOptions:
+  - -deprecation
+  - -feature
+  - -unchecked
