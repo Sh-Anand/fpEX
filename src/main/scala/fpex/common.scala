@@ -1,4 +1,4 @@
-package main.scala.fpex
+package fpex
 
 import chisel3._
 

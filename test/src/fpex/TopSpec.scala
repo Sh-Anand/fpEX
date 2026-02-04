@@ -1,4 +1,4 @@
-package main.scala.fpex
+package fpex
 
 import chiseltest._
 import org.scalatest.flatspec.AnyFlatSpec

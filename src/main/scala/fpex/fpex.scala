@@ -1,8 +1,8 @@
-package main.scala.fpex
+package fpex
 
 import chisel3._
 import chisel3.util._
-import main.scala.hardfloat._
+import hardfloat._
 
 class FPEXReq(numFP16Lanes: Int = 4, tagWidth: Int = 1) extends Bundle {
   val fmt = FPFormat()

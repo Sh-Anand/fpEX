@@ -1,4 +1,4 @@
-package main.scala.fpex
+package fpex
 
 object Main extends App {
   circt.stage.ChiselStage.emitSystemVerilogFile(
