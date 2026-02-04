@@ -12,4 +12,5 @@ scalacOptions:
   - -deprecation
   - -feature
   - -unchecked
-mainClass: fpex.Main
+  - -language:reflectiveCalls
+mainClass: main.scala.fpex.Main
