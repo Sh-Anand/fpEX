@@ -74,6 +74,13 @@ class RawFloat(val expWidth: Int, val sigWidth: Int) extends Bundle
     val sExp: SInt = SInt((expWidth + 2).W)
     val sig: UInt = UInt((sigWidth + 1).W)   // 2 m.s. bits cannot both be 0
 
+    // conditional negation
+    def negate(neg: Bool): RawFloat = {
+      val y = Wire(new RawFloat(expWidth, sigWidth))
+      y := this
+      y.sign := this.sign ^ neg
+      y
+    }
 }
 
 //*** CHANGE THIS INTO A '.isSigNaN' METHOD OF THE 'RawFloat' CLASS:
@@ -81,4 +88,3 @@ object isSigNaNRawFloat
 {
     def apply(in: RawFloat): Bool = in.isNaN && !in.sig(in.sigWidth - 2)
 }
-

@@ -115,6 +115,7 @@ class FPEX(fmt: FPFormat.Type, numLanes: Int = 4, tagWidth: Int = 1)
 
   //stage 1
   val stage1Valid = RegNext(io.req.fire && !earlyTerminate)
+  val stage1RawFloatVec = RegEnable(VecInit(rawFloatVec.map(_.negate(io.req.bits.neg))), io.req.fire && !earlyTerminate)
 
   io.req.ready := state === FPEXState.READY
   io.resp.valid := state === FPEXState.DONE
