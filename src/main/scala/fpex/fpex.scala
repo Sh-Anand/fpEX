@@ -44,8 +44,9 @@ class FPEX(fpT: FPType, numLanes: Int = 4, tagWidth: Int = 1)
 
   //stage 0: special case check and raw float decomposition
   //flush subnormals to zero, ignore x for which e^x = inf
-  val rawFloatVec = VecInit(io.req.bits.xVec.map(x => rawFloatFromFN(fpT.expWidth, fpT.sigWidth, x)))
-  val expFPOverflow = VecInit(io.req.bits.xVec.map(x => fpT.expFPIsInf(x)))
+  val rawFloatVec = VecInit(io.req.bits.xVec.map(
+    x => rawFloatFromFN(fpT.expWidth, fpT.sigWidth, x).negate(io.req.bits.neg)))
+  val expFPOverflow = VecInit(io.req.bits.xVec.map(x => fpT.expFPIsInf(x, io.req.bits.neg)))
   val rawFloatOf = rawFloatVec.zip(expFPOverflow)
   val earlyRes = VecInit(rawFloatOf.map { case (x, of) =>
     MuxCase(
@@ -65,8 +66,7 @@ class FPEX(fpT: FPType, numLanes: Int = 4, tagWidth: Int = 1)
 
   //stage 1
   val stage1Valid = RegNext(io.req.fire && !earlyTerminate)
-  val stage1RawFloatVec = RegEnable(VecInit(rawFloatVec.map(_.negate(io.req.bits.neg))),
-    io.req.fire && !earlyTerminate)
+  val stage1RawFloatVec = RegEnable(rawFloatVec, io.req.fire && !earlyTerminate)
   val stage1Qmn = VecInit(stage1RawFloatVec.map(x => fpT.qmnFromRawFloat(x)))
 
   //stage 2

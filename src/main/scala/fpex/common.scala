@@ -31,8 +31,8 @@ sealed trait FPType {
   def infinity = Cat(Fill(expWidth, 1.U(1.W)), 0.U((sigWidth - 1).W))
   def qmnCtor = () => new Qmn(qmnM, qmnN)
 
-  def expFPIsInf(in: UInt): Bool = {
-    val sign = in(wordWidth - 1)
+  def expFPIsInf(in: UInt, neg: Bool): Bool = {
+    val sign = in(wordWidth - 1) ^ neg
     val exp = in(wordWidth - 2, sigWidth - 1)
     val frac = in(sigWidth - 2, 0)
     !sign && (exp > maxXExp || (exp === maxXExp && frac > maxXSig))
