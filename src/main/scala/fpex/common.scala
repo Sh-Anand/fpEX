@@ -73,6 +73,3 @@ object FPType {
     val maxXSig = "h31".U((sigWidth - 1).W)
   }
 }
-
-object FPUtil {
-}
