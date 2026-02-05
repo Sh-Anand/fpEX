@@ -60,10 +60,10 @@ object rawFloatFromIN
         out.isNaN  := false.B
         out.isInf  := false.B
         out.isZero := ! sig(in.getWidth - 1)
+        out.isSubNorm := false.B
         out.sign   := sign
         out.sExp   := (2.U(2.W) ## ~adjustedNormDist(expWidth - 2, 0)).zext
         out.sig    := sig
         out
     }
 }
-

@@ -39,24 +39,23 @@ class FPEX(fpT: FPType, numLanes: Int = 4, tagWidth: Int = 1)
 
   val state = RegInit(FPEXState.READY)
   val req = Reg(new FPEXReq(fpT.wordWidth, numLanes, tagWidth))
-  val recFnVec = VecInit(io.req.bits.xVec.map(x => recFNFromFN(fpT.expWidth, fpT.sigWidth, x)))
   val res = Reg(Vec(numLanes, UInt(fpT.wordWidth.W)))
   val busy = state === FPEXState.BUSY
 
   //stage 0: special case check and raw float decomposition
-  val rawFloatVec = VecInit(recFnVec.map(x => rawFloatFromRecFN(fpT.expWidth, fpT.sigWidth, x)))
+  val rawFloatVec = VecInit(io.req.bits.xVec.map(x => rawFloatFromFN(fpT.expWidth, fpT.sigWidth, x)))
   val earlyRes = VecInit(rawFloatVec.zipWithIndex.map { case (x, i) =>
     MuxCase(
       0.U(fpT.wordWidth.W),
       Seq(
         x.isNaN -> Cat(x.sign, fpT.nanExp, isSigNaNRawFloat(x), fpT.nanSig),
-        x.isZero -> fpT.one,
+        (x.isZero || x.isSubNorm) -> fpT.one,
         (x.isInf && x.sign) -> fpT.zero,
         (x.isInf && !x.sign) -> Cat(x.sign, fpT.infinity)
       )
     )
   })
-  val earlyValid = VecInit(rawFloatVec.map(x => x.isInf || x.isZero || x.isNaN))
+  val earlyValid = VecInit(rawFloatVec.map(x => x.isInf || x.isZero || x.isSubNorm || x.isNaN))
   val earlyTerminate = earlyValid.asUInt.andR
 
   //stage 1

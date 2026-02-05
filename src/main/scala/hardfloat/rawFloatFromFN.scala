@@ -47,6 +47,7 @@ object rawFloatFromFN {
 
     val isZeroExpIn = (expIn === 0.U)
     val isZeroFractIn = (fractIn === 0.U)
+    val isSubNorm = isZeroExpIn && !isZeroFractIn
 
     val normDist = countLeadingZeros(fractIn)
     val subnormFract = (fractIn << normDist) (sigWidth - 3, 0) << 1
@@ -64,6 +65,7 @@ object rawFloatFromFN {
     out.isNaN := isSpecial && !isZeroFractIn
     out.isInf := isSpecial && isZeroFractIn
     out.isZero := isZero
+    out.isSubNorm := isSubNorm
     out.sign := sign
     out.sExp := adjustedExp(expWidth, 0).zext
     out.sig :=
@@ -71,4 +73,3 @@ object rawFloatFromFN {
     out
   }
 }
-

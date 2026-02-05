@@ -56,10 +56,10 @@ object rawFloatFromRecFN
         out.isNaN  := isSpecial &&   exp(expWidth - 2)
         out.isInf  := isSpecial && ! exp(expWidth - 2)
         out.isZero := isZero
+        out.isSubNorm := false.B
         out.sign   := in(expWidth + sigWidth)
         out.sExp   := exp.zext
         out.sig    := 0.U(1.W) ## ! isZero ## in(sigWidth - 2, 0)
         out
     }
 }
-

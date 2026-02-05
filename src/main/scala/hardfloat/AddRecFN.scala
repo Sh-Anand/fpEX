@@ -121,6 +121,7 @@ class AddRawFN(expWidth: Int, sigWidth: Int) extends RawModule
     io.invalidExc := isSigNaNRawFloat(io.a) || isSigNaNRawFloat(io.b) || notSigNaN_invalidExc
     io.rawOut.isInf := notNaN_isInfOut
     io.rawOut.isZero := notNaN_isZeroOut
+    io.rawOut.isSubNorm := false.B
     io.rawOut.sExp := common_sExpOut
     io.rawOut.isNaN := io.a.isNaN || io.b.isNaN
     io.rawOut.sign := notNaN_signOut
@@ -163,4 +164,3 @@ class AddRecFN(expWidth: Int, sigWidth: Int) extends RawModule
     io.out            := roundRawFNToRecFN.io.out
     io.exceptionFlags := roundRawFNToRecFN.io.exceptionFlags
 }
-

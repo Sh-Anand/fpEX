@@ -281,6 +281,7 @@ class MulAddRecFNToRaw_postMul(expWidth: Int, sigWidth: Int) extends RawModule
     io.rawOut.isZero :=
         notNaN_addZeros ||
             (! io.fromPreMul.CIsDominant && notCDom_completeCancellation)
+    io.rawOut.isSubNorm := false.B
     io.rawOut.sign :=
         (notNaN_isInfProd && io.fromPreMul.signProd) ||
         (io.fromPreMul.isInfC && opSignC) ||
@@ -345,4 +346,3 @@ class MulAddRecFN(expWidth: Int, sigWidth: Int) extends RawModule
     io.out            := roundRawFNToRecFN.io.out
     io.exceptionFlags := roundRawFNToRecFN.io.exceptionFlags
 }
-
