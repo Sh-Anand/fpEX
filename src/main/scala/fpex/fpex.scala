@@ -7,54 +7,6 @@ import hardfloat._
 trait HasFPEXParams {
   def numFP16Lanes = 4
   def tagWidth = 8
-
-  def getWordExpSigWidth(fmt: FPFormat.Type): (Int, Int, Int) = {
-    fmt match {
-      case FPFormat.FP32 => (32, 8, 24)
-      case FPFormat.FP16 => (16, 5, 11)
-      case FPFormat.BF16 => (16, 8, 8)
-      case _ => (32, 8, 8)
-    }
-  }
-
-  // get signless exp,sig bits. NOTE: returns 1 fewer sig bit, prefix quiet/signalling bit
-  def constructNaNExpSig(fmt: FPFormat.Type): (UInt, UInt) = {
-    fmt match {
-      case FPFormat.FP32 => (Fill(8, 1.U(1.W)), Fill(22, 1.U(1.W)))
-      case FPFormat.FP16 => (Fill(5, 1.U(1.W)), Fill(9, 1.U(1.W)))
-      case FPFormat.BF16 => (Fill(8, 1.U(1.W)), Fill(6, 1.U(1.W)))
-      case _ => (Fill(8, 1.U(1.W)), Fill(22, 1.U(1.W)))
-    }
-  }
-
-  // get pos zero
-  def constructZero(fmt: FPFormat.Type): UInt = {
-    fmt match {
-      case FPFormat.FP32 => Cat(0.U(1.W), Fill(8, 0.U(1.W)), Fill(23, 0.U(1.W)))
-      case FPFormat.FP16 => Cat(0.U(1.W), Fill(5, 0.U(1.W)), Fill(10, 0.U(1.W)))
-      case FPFormat.BF16 => Cat(0.U(1.W), Fill(8, 0.U(1.W)), Fill(7, 0.U(1.W)))
-      case _ => constructZero(FPFormat.FP32)
-    }
-  }
-
-  def constructOne(fmt: FPFormat.Type): UInt = {
-    fmt match {
-      case FPFormat.FP32 => Cat(0.U(1.W), 127.U(8.W), 0.U(23.W))
-      case FPFormat.FP16 => Cat(0.U(1.W), 15.U(5.W), 0.U(10.W))
-      case FPFormat.BF16 => Cat(0.U(1.W), 127.U(8.W), 0.U(7.W))
-      case _ => constructOne(FPFormat.FP32)
-    }
-  }
-
-  // get signless infinity
-  def constructInf(fmt: FPFormat.Type): UInt = {
-    fmt match {
-      case FPFormat.FP32 => Cat(Fill(8, 1.U(1.W)), 0.U(23.W))
-      case FPFormat.FP16 => Cat(Fill(5, 1.U(1.W)), 0.U(10.W))
-      case FPFormat.BF16 => Cat(Fill(8, 1.U(1.W)), 0.U(7.W))
-      case _ => constructInf(FPFormat.FP32)
-    }
-  }
 }
 
 object FPEXState extends ChiselEnum {
@@ -80,11 +32,11 @@ class FPEXResp(wordWidth: Int, numLanes: Int, tagWidth: Int) extends Bundle {
 class FPEX(fmt: FPFormat.Type, numLanes: Int = 4, tagWidth: Int = 1)
   extends Module
   with HasFPEXParams {
-  val (wordWidth, expWidth, sigWidth) = getWordExpSigWidth(fmt)
-  val (naNExp, naNSig) = constructNaNExpSig(fmt)
-  val zero = constructZero(fmt)
-  val one = constructOne(fmt)
-  val infinity = constructInf(fmt)
+  val (wordWidth, expWidth, sigWidth) = FPConst.getWordExpSigWidth(fmt)
+  val (naNExp, naNSig) = FPConst.constructNaNExpSig(fmt)
+  val zero = FPConst.constructZero(fmt)
+  val one = FPConst.constructOne(fmt)
+  val infinity = FPConst.constructInf(fmt)
 
   val io = IO(new Bundle {
     val req = Flipped(Decoupled(new FPEXReq(wordWidth, numLanes, tagWidth)))
