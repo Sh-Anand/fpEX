@@ -17,10 +17,10 @@ class FPEXSpec extends AnyFlatSpec with ChiselScalatestTester {
     exp == expMask && frac != 0
   }
 
-  private def driveAndAwait(dut: FPEX, value: Long, lanes: Int, maxCycles: Int = 10): Seq[BigInt] = {
+  private def driveAndAwait(dut: FPEX, value: Long, lanes: Int, neg: Boolean = false, maxCycles: Int = 10): Seq[BigInt] = {
     dut.io.resp.ready.poke(true.B)
     dut.io.req.valid.poke(true.B)
-    dut.io.req.bits.neg.poke(false.B)
+    dut.io.req.bits.neg.poke(neg.B)
     dut.io.req.bits.laneMask.poke(((1 << lanes) - 1).U)
     for (i <- 0 until lanes) {
       dut.io.req.bits.xVec(i).poke(value.U)
@@ -71,6 +71,26 @@ class FPEXSpec extends AnyFlatSpec with ChiselScalatestTester {
       val overMaxX = 0x42b17219L
       val overMaxXOut = driveAndAwait(dut, overMaxX, lanes)
       overMaxXOut.foreach(v => assert(v == posInf, s"expected +Inf, got 0x${v.toString(16)}"))
+
+      // negation special cases
+      val nanNegOut = driveAndAwait(dut, nanIn, lanes, neg = true)
+      nanNegOut.foreach(v => assert(isNaN(v, 8, 23), s"expected NaN, got 0x${v.toString(16)}"))
+
+      val posInfNegOut = driveAndAwait(dut, posInf, lanes, neg = true)
+      posInfNegOut.foreach(v => assert(v == 0x00000000L, s"expected +0, got 0x${v.toString(16)}"))
+
+      val negInfNegOut = driveAndAwait(dut, negInf, lanes, neg = true)
+      negInfNegOut.foreach(v => assert(v == posInf, s"expected +Inf, got 0x${v.toString(16)}"))
+
+      val posZeroNegOut = driveAndAwait(dut, posZero, lanes, neg = true)
+      posZeroNegOut.foreach(v => assert(v == one, s"expected 1.0, got 0x${v.toString(16)}"))
+
+      val subnormalNegOut = driveAndAwait(dut, subnormal, lanes, neg = true)
+      subnormalNegOut.foreach(v => assert(v == one, s"expected 1.0, got 0x${v.toString(16)}"))
+
+      val negOverflowIn = 0xc2b17219L
+      val negOverflowOut = driveAndAwait(dut, negOverflowIn, lanes, neg = true)
+      negOverflowOut.foreach(v => assert(v == posInf, s"expected +Inf, got 0x${v.toString(16)}"))
     }
   }
 
@@ -108,6 +128,26 @@ class FPEXSpec extends AnyFlatSpec with ChiselScalatestTester {
       val overMaxX = 0x498dL
       val overMaxXOut = driveAndAwait(dut, overMaxX, lanes)
       overMaxXOut.foreach(v => assert(v == posInf, s"expected +Inf, got 0x${v.toString(16)}"))
+
+      // negation special cases
+      val nanNegOut = driveAndAwait(dut, nanIn, lanes, neg = true)
+      nanNegOut.foreach(v => assert(isNaN(v, 5, 10), s"expected NaN, got 0x${v.toString(16)}"))
+
+      val posInfNegOut = driveAndAwait(dut, posInf, lanes, neg = true)
+      posInfNegOut.foreach(v => assert(v == 0x0000L, s"expected +0, got 0x${v.toString(16)}"))
+
+      val negInfNegOut = driveAndAwait(dut, negInf, lanes, neg = true)
+      negInfNegOut.foreach(v => assert(v == posInf, s"expected +Inf, got 0x${v.toString(16)}"))
+
+      val posZeroNegOut = driveAndAwait(dut, posZero, lanes, neg = true)
+      posZeroNegOut.foreach(v => assert(v == one, s"expected 1.0, got 0x${v.toString(16)}"))
+
+      val subnormalNegOut = driveAndAwait(dut, subnormal, lanes, neg = true)
+      subnormalNegOut.foreach(v => assert(v == one, s"expected 1.0, got 0x${v.toString(16)}"))
+
+      val negOverflowIn = 0xc98dL
+      val negOverflowOut = driveAndAwait(dut, negOverflowIn, lanes, neg = true)
+      negOverflowOut.foreach(v => assert(v == posInf, s"expected +Inf, got 0x${v.toString(16)}"))
     }
   }
 
@@ -145,6 +185,26 @@ class FPEXSpec extends AnyFlatSpec with ChiselScalatestTester {
       val overMaxX = 0x42b2L
       val overMaxXOut = driveAndAwait(dut, overMaxX, lanes)
       overMaxXOut.foreach(v => assert(v == posInf, s"expected +Inf, got 0x${v.toString(16)}"))
+
+      // negation special cases
+      val nanNegOut = driveAndAwait(dut, nanIn, lanes, neg = true)
+      nanNegOut.foreach(v => assert(isNaN(v, 8, 7), s"expected NaN, got 0x${v.toString(16)}"))
+
+      val posInfNegOut = driveAndAwait(dut, posInf, lanes, neg = true)
+      posInfNegOut.foreach(v => assert(v == 0x0000L, s"expected +0, got 0x${v.toString(16)}"))
+
+      val negInfNegOut = driveAndAwait(dut, negInf, lanes, neg = true)
+      negInfNegOut.foreach(v => assert(v == posInf, s"expected +Inf, got 0x${v.toString(16)}"))
+
+      val posZeroNegOut = driveAndAwait(dut, posZero, lanes, neg = true)
+      posZeroNegOut.foreach(v => assert(v == one, s"expected 1.0, got 0x${v.toString(16)}"))
+
+      val subnormalNegOut = driveAndAwait(dut, subnormal, lanes, neg = true)
+      subnormalNegOut.foreach(v => assert(v == one, s"expected 1.0, got 0x${v.toString(16)}"))
+
+      val negOverflowIn = 0xc2b2L
+      val negOverflowOut = driveAndAwait(dut, negOverflowIn, lanes, neg = true)
+      negOverflowOut.foreach(v => assert(v == posInf, s"expected +Inf, got 0x${v.toString(16)}"))
     }
   }
 }
