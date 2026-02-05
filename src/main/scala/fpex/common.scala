@@ -37,32 +37,32 @@ object FPType {
     val wordWidth = 32
     val expWidth = 8
     val sigWidth = 24
-    val rln2 = "h3fb8aa3b".U(32.W) // 1/ln2
+    val rln2 = "h3fb8aa3b".U(wordWidth.W) // 1/ln2
     val qmnM = 10
     val qmnN = 18
-    val maxXExp = "h85".U(8.W)
-    val maxXFrac = "h317218".U(23.W)
+    val maxXExp = "h85".U(expWidth.W)
+    val maxXFrac = "h317218".U((sigWidth - 1).W)
   }
 
   case object FP16T extends FPType {
     val wordWidth = 16
     val expWidth = 5
     val sigWidth = 11
-    val rln2 = "h3dc5".U(16.W) // 1/ln2
+    val rln2 = "h3dc5".U(wordWidth.W) // 1/ln2
     val qmnM = 6
     val qmnN = 12
-    val maxXExp = "h12".U(5.W)
-    val maxXFrac = "h18c".U(10.W)
+    val maxXExp = "h12".U(expWidth.W)
+    val maxXFrac = "h18c".U((sigWidth - 1).W)
   }
 
   case object BF16T extends FPType {
     val wordWidth = 16
     val expWidth = 8
     val sigWidth = 8
-    val rln2 = "h3fb9".U(16.W) // 1/ln2 (bf16, RNE)
+    val rln2 = "h3fb9".U(wordWidth.W) // 1/ln2 (bf16, RNE)
     val qmnM = 9
     val qmnN = 12
     val maxXExp = "h85".U(8.W)
-    val maxXFrac = "h31".U(7.W)
+    val maxXFrac = "h31".U((sigWidth - 1).W)
   }
 }
