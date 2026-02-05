@@ -22,7 +22,7 @@ sealed trait FPType {
   def qmnM: Int
   def qmnN: Int
   def maxXExp: UInt // ln(max finite) exponent
-  def maxXFrac: UInt // ln(max finite) fraction
+  def maxXSig: UInt // ln(max finite) fraction
   def bias: Int = (1 << (expWidth - 1)) - 1
   def nanExp = Fill(expWidth, 1.U(1.W))
   def nanSig = Fill(sigWidth - 2, 1.U(1.W))
@@ -41,7 +41,7 @@ object FPType {
     val qmnM = 10
     val qmnN = 18
     val maxXExp = "h85".U(expWidth.W)
-    val maxXFrac = "h317218".U((sigWidth - 1).W)
+    val maxXSig = "h317218".U((sigWidth - 1).W)
   }
 
   case object FP16T extends FPType {
@@ -52,7 +52,7 @@ object FPType {
     val qmnM = 6
     val qmnN = 12
     val maxXExp = "h12".U(expWidth.W)
-    val maxXFrac = "h18c".U((sigWidth - 1).W)
+    val maxXSig = "h18c".U((sigWidth - 1).W)
   }
 
   case object BF16T extends FPType {
@@ -63,6 +63,15 @@ object FPType {
     val qmnM = 9
     val qmnN = 12
     val maxXExp = "h85".U(8.W)
-    val maxXFrac = "h31".U((sigWidth - 1).W)
+    val maxXSig = "h31".U((sigWidth - 1).W)
+  }
+}
+
+object FPUtil {
+  def expFPIsInf(in: UInt, fpT: FPType): Bool = {
+    val sign = in(fpT.wordWidth - 1)
+    val exp = in(fpT.wordWidth - 2, fpT.sigWidth - 1)
+    val frac = in(fpT.sigWidth - 2, 0)
+    !sign && (exp > fpT.maxXExp || (exp === fpT.maxXExp && frac > fpT.maxXSig))
   }
 }
