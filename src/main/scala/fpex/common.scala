@@ -30,6 +30,13 @@ sealed trait FPType {
   def one = Cat(0.U(1.W), bias.U(expWidth.W), 0.U((sigWidth - 1).W))
   def infinity = Cat(Fill(expWidth, 1.U(1.W)), 0.U((sigWidth - 1).W))
   def qmnCtor = () => new Qmn(qmnM, qmnN)
+
+  def expFPIsInf(in: UInt): Bool = {
+    val sign = in(wordWidth - 1)
+    val exp = in(wordWidth - 2, sigWidth - 1)
+    val frac = in(sigWidth - 2, 0)
+    !sign && (exp > maxXExp || (exp === maxXExp && frac > maxXSig))
+  }
 }
 
 object FPType {
@@ -68,10 +75,4 @@ object FPType {
 }
 
 object FPUtil {
-  def expFPIsInf(in: UInt, fpT: FPType): Bool = {
-    val sign = in(fpT.wordWidth - 1)
-    val exp = in(fpT.wordWidth - 2, fpT.sigWidth - 1)
-    val frac = in(fpT.sigWidth - 2, 0)
-    !sign && (exp > fpT.maxXExp || (exp === fpT.maxXExp && frac > fpT.maxXSig))
-  }
 }
