@@ -66,6 +66,11 @@ class FPEXSpec extends AnyFlatSpec with ChiselScalatestTester {
       val subnormal = 0x00000001L
       val subnormalOut = driveAndAwait(dut, subnormal, lanes)
       subnormalOut.foreach(v => assert(v == one, s"expected 1.0, got 0x${v.toString(16)}"))
+
+      // overflow -> +Inf
+      val overMaxX = 0x42b17219L
+      val overMaxXOut = driveAndAwait(dut, overMaxX, lanes)
+      overMaxXOut.foreach(v => assert(v == posInf, s"expected +Inf, got 0x${v.toString(16)}"))
     }
   }
 
@@ -98,6 +103,11 @@ class FPEXSpec extends AnyFlatSpec with ChiselScalatestTester {
       val subnormal = 0x0001L
       val subnormalOut = driveAndAwait(dut, subnormal, lanes)
       subnormalOut.foreach(v => assert(v == one, s"expected 1.0, got 0x${v.toString(16)}"))
+
+      // overflow -> +Inf
+      val overMaxX = 0x498dL
+      val overMaxXOut = driveAndAwait(dut, overMaxX, lanes)
+      overMaxXOut.foreach(v => assert(v == posInf, s"expected +Inf, got 0x${v.toString(16)}"))
     }
   }
 
@@ -130,6 +140,11 @@ class FPEXSpec extends AnyFlatSpec with ChiselScalatestTester {
       val subnormal = 0x0001L
       val subnormalOut = driveAndAwait(dut, subnormal, lanes)
       subnormalOut.foreach(v => assert(v == one, s"expected 1.0, got 0x${v.toString(16)}"))
+
+      // overflow -> +Inf
+      val overMaxX = 0x42b2L
+      val overMaxXOut = driveAndAwait(dut, overMaxX, lanes)
+      overMaxXOut.foreach(v => assert(v == posInf, s"expected +Inf, got 0x${v.toString(16)}"))
     }
   }
 }
