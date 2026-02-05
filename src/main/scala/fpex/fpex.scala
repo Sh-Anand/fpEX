@@ -29,36 +29,30 @@ class FPEXResp(wordWidth: Int, numLanes: Int, tagWidth: Int) extends Bundle {
   val result = Vec(numLanes, UInt(wordWidth.W))
 }
 
-class FPEX(fmt: FPFormat.Type, numLanes: Int = 4, tagWidth: Int = 1)
+class FPEX(fpT: FPType, numLanes: Int = 4, tagWidth: Int = 1)
   extends Module
   with HasFPEXParams {
-  val (wordWidth, expWidth, sigWidth) = FPConst.getWordExpSigWidth(fmt)
-  val (naNExp, naNSig) = FPConst.constructNaNExpSig(fmt)
-  val zero = FPConst.constructZero(fmt)
-  val one = FPConst.constructOne(fmt)
-  val infinity = FPConst.constructInf(fmt)
-
   val io = IO(new Bundle {
-    val req = Flipped(Decoupled(new FPEXReq(wordWidth, numLanes, tagWidth)))
-    val resp = Decoupled(new FPEXResp(wordWidth, numLanes, tagWidth))
+    val req = Flipped(Decoupled(new FPEXReq(fpT.wordWidth, numLanes, tagWidth)))
+    val resp = Decoupled(new FPEXResp(fpT.wordWidth, numLanes, tagWidth))
   })
 
   val state = RegInit(FPEXState.READY)
-  val req = Reg(new FPEXReq(wordWidth, numLanes, tagWidth))
-  val recFnVec = VecInit(io.req.bits.xVec.map(x => recFNFromFN(expWidth, sigWidth, x)))
-  val res = Reg(Vec(numLanes, UInt(wordWidth.W)))
+  val req = Reg(new FPEXReq(fpT.wordWidth, numLanes, tagWidth))
+  val recFnVec = VecInit(io.req.bits.xVec.map(x => recFNFromFN(fpT.expWidth, fpT.sigWidth, x)))
+  val res = Reg(Vec(numLanes, UInt(fpT.wordWidth.W)))
   val busy = state === FPEXState.BUSY
 
   //stage 0: special case check and raw float decomposition
-  val rawFloatVec = VecInit(recFnVec.map(x => rawFloatFromRecFN(expWidth, sigWidth, x)))
+  val rawFloatVec = VecInit(recFnVec.map(x => rawFloatFromRecFN(fpT.expWidth, fpT.sigWidth, x)))
   val earlyRes = VecInit(rawFloatVec.zipWithIndex.map { case (x, i) =>
     MuxCase(
-      0.U(wordWidth.W),
+      0.U(fpT.wordWidth.W),
       Seq(
-        x.isNaN -> Cat(x.sign, naNExp, isSigNaNRawFloat(x), naNSig),
-        x.isZero -> one,
-        (x.isInf && x.sign) -> zero,
-        (x.isInf && !x.sign) -> Cat(x.sign, infinity)
+        x.isNaN -> Cat(x.sign, fpT.nanExp, isSigNaNRawFloat(x), fpT.nanSig),
+        x.isZero -> fpT.one,
+        (x.isInf && x.sign) -> fpT.zero,
+        (x.isInf && !x.sign) -> Cat(x.sign, fpT.infinity)
       )
     )
   })
@@ -67,7 +61,8 @@ class FPEX(fmt: FPFormat.Type, numLanes: Int = 4, tagWidth: Int = 1)
 
   //stage 1
   val stage1Valid = RegNext(io.req.fire && !earlyTerminate)
-  val stage1RawFloatVec = RegEnable(VecInit(rawFloatVec.map(_.negate(io.req.bits.neg))), io.req.fire && !earlyTerminate)
+  val stage1RawFloatVec = RegEnable(VecInit(rawFloatVec.map(_.negate(io.req.bits.neg))),
+    io.req.fire && !earlyTerminate)
 
   io.req.ready := state === FPEXState.READY
   io.resp.valid := state === FPEXState.DONE

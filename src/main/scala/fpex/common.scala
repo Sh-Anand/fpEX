@@ -13,70 +13,47 @@ object FPRoundingMode extends ChiselEnum {
   val DYN = Value("b111".U)
 }
 
-object FPFormat extends ChiselEnum {
-  val FP32 = Value("b000".U)
-  val FP64 = Value("b001".U) // unsupported
-  val FP16 = Value("b010".U)
-  val E5M2 = Value("b011".U) // unsupported
-  val BF16 = Value("b100".U)
-  val _w   = Value("b111".U)
+sealed trait FPType {
+  def wordWidth: Int
+  def expWidth: Int
+  def sigWidth: Int // includes hidden bit
+  def rln2: UInt
+  def qmnM: Int
+  def qmnN: Int
+  def bias: Int = (1 << (expWidth - 1)) - 1
+  def nanExp = Fill(expWidth, 1.U(1.W))
+  def nanSig = Fill(sigWidth - 2, 1.U(1.W))
+  def zero = Cat(0.U(1.W), Fill(expWidth, 0.U(1.W)), Fill(sigWidth - 1, 0.U(1.W)))
+  def one = Cat(0.U(1.W), bias.U(expWidth.W), 0.U((sigWidth - 1).W))
+  def infinity = Cat(Fill(expWidth, 1.U(1.W)), 0.U((sigWidth - 1).W))
+  def qmnCtor = () => new Qmn(qmnM, qmnN)
 }
 
-object FPConst {
-  def getWordExpSigWidth(fmt: FPFormat.Type): (Int, Int, Int) = {
-    fmt match {
-      case FPFormat.FP32 => (32, 8, 24)
-      case FPFormat.FP16 => (16, 5, 11)
-      case FPFormat.BF16 => (16, 8, 8)
-      case _ => (32, 8, 8)
-    }
+object FPType {
+  case object FP32T extends FPType {
+    val wordWidth = 32
+    val expWidth = 8
+    val sigWidth = 24
+    val rln2 = "h3fb8aa3b".U(32.W) // 1/ln2
+    val qmnM = 10
+    val qmnN = 18
   }
 
-  // get signless exp,sig bits. NOTE: returns 1 fewer sig bit, prefix quiet/signalling bit
-  def constructNaNExpSig(fmt: FPFormat.Type): (UInt, UInt) = {
-    fmt match {
-      case FPFormat.FP32 => (Fill(8, 1.U(1.W)), Fill(22, 1.U(1.W)))
-      case FPFormat.FP16 => (Fill(5, 1.U(1.W)), Fill(9, 1.U(1.W)))
-      case FPFormat.BF16 => (Fill(8, 1.U(1.W)), Fill(6, 1.U(1.W)))
-      case _ => (Fill(8, 1.U(1.W)), Fill(22, 1.U(1.W)))
-    }
+  case object FP16T extends FPType {
+    val wordWidth = 16
+    val expWidth = 5
+    val sigWidth = 11
+    val rln2 = "h3dc5".U(16.W) // 1/ln2
+    val qmnM = 6
+    val qmnN = 12
   }
 
-  // get pos zero
-  def constructZero(fmt: FPFormat.Type): UInt = {
-    fmt match {
-      case FPFormat.FP32 => Cat(0.U(1.W), Fill(8, 0.U(1.W)), Fill(23, 0.U(1.W)))
-      case FPFormat.FP16 => Cat(0.U(1.W), Fill(5, 0.U(1.W)), Fill(10, 0.U(1.W)))
-      case FPFormat.BF16 => Cat(0.U(1.W), Fill(8, 0.U(1.W)), Fill(7, 0.U(1.W)))
-      case _ => constructZero(FPFormat.FP32)
-    }
-  }
-
-  def constructOne(fmt: FPFormat.Type): UInt = {
-    fmt match {
-      case FPFormat.FP32 => Cat(0.U(1.W), 127.U(8.W), 0.U(23.W))
-      case FPFormat.FP16 => Cat(0.U(1.W), 15.U(5.W), 0.U(10.W))
-      case FPFormat.BF16 => Cat(0.U(1.W), 127.U(8.W), 0.U(7.W))
-      case _ => constructOne(FPFormat.FP32)
-    }
-  }
-
-  // get signless infinity
-  def constructInf(fmt: FPFormat.Type): UInt = {
-    fmt match {
-      case FPFormat.FP32 => Cat(Fill(8, 1.U(1.W)), 0.U(23.W))
-      case FPFormat.FP16 => Cat(Fill(5, 1.U(1.W)), 0.U(10.W))
-      case FPFormat.BF16 => Cat(Fill(8, 1.U(1.W)), 0.U(7.W))
-      case _ => constructInf(FPFormat.FP32)
-    }
-  }
-
-  def getrln2(fmt: FPFormat.Type): UInt = {
-    fmt match {
-      case FPFormat.FP32 => "h3fb8aa3b".U(32.W) // 1/ln2
-      case FPFormat.FP16 => "h3dc5".U(16.W)     // 1/ln2
-      case FPFormat.BF16 => "h3fb9".U(16.W)     // 1/ln2 (bf16, RNE)
-      case _ => "h3fb8aa3b".U(32.W)
-    }
+  case object BF16T extends FPType {
+    val wordWidth = 16
+    val expWidth = 8
+    val sigWidth = 8
+    val rln2 = "h3fb9".U(16.W) // 1/ln2 (bf16, RNE)
+    val qmnM = 9
+    val qmnN = 12
   }
 }

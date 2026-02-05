@@ -38,7 +38,7 @@ class FPEXSpec extends AnyFlatSpec with ChiselScalatestTester {
   }
 
   it should "handle special cases (FP32)" in {
-    test(new FPEX(FPFormat.FP32, numLanes = 4)) { dut =>
+    test(new FPEX(FPType.FP32T, numLanes = 4)) { dut =>
       val lanes = 4
 
       // NaN -> NaN
@@ -65,7 +65,7 @@ class FPEXSpec extends AnyFlatSpec with ChiselScalatestTester {
   }
 
   it should "handle special cases (FP16)" in {
-    test(new FPEX(FPFormat.FP16, numLanes = 4)) { dut =>
+    test(new FPEX(FPType.FP16T, numLanes = 4)) { dut =>
       val lanes = 4
 
       // NaN -> NaN
@@ -92,7 +92,7 @@ class FPEXSpec extends AnyFlatSpec with ChiselScalatestTester {
   }
 
   it should "handle special cases (BF16)" in {
-    test(new FPEX(FPFormat.BF16, numLanes = 4)) { dut =>
+    test(new FPEX(FPType.BF16T, numLanes = 4)) { dut =>
       val lanes = 4
 
       // NaN -> NaN

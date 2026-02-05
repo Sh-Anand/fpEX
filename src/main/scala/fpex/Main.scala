@@ -2,7 +2,7 @@ package fpex
 
 object Main extends App {
   circt.stage.ChiselStage.emitSystemVerilogFile(
-    new FPEX(FPFormat.FP32),
+    new FPEX(FPType.FP32T),
     Array("--target-dir", "generated")
   )
 }
