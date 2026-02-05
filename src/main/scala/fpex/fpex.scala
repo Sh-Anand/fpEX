@@ -64,15 +64,17 @@ class FPEX(fpT: FPType, numLanes: Int = 4, tagWidth: Int = 1)
   })
   val earlyTerminate = earlyValid.asUInt.andR
 
-  //stage 1
+  //stage 1: convert to Qmn
   val stage1Valid = RegNext(io.req.fire && !earlyTerminate)
   val stage1RawFloatVec = RegEnable(rawFloatVec, io.req.fire && !earlyTerminate)
   val stage1Qmn = VecInit(stage1RawFloatVec.map(x => fpT.qmnFromRawFloat(x)))
 
-  //stage 2
+  //stage 2: multiply x/ln2, extract k and r
   val stage2Valid = RegNext(stage1Valid)
   val stage2Qmn = RegEnable(stage1Qmn, stage1Valid)
-  val xrln2Vec = VecInit(stage2Qmn.map(_.mul(fpT.rln2)))
+  val xrln2KRVec = stage2Qmn.map(_.mul(fpT.rln2).getKR).unzip
+  val kVec = VecInit(xrln2KRVec._1)
+  val rVec = VecInit(xrln2KRVec._2)
 
 
   io.req.ready := state === FPEXState.READY
