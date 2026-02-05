@@ -37,6 +37,15 @@ sealed trait FPType {
     val frac = in(sigWidth - 2, 0)
     !sign && (exp > maxXExp || (exp === maxXExp && frac > maxXSig))
   }
+
+  // assumes no special cases and no overflow
+  def qmnFromRawFloat(rawFloat: RawFloat): Qmn = {
+    val shift = qmnN.asSInt + rawFloat.sExp - (sigWidth - 1).asSInt
+    val qmn = Wire(qmnCtor())
+    val mag = Mux(shift < 0.S, rawFloat.sig >> (-shift).asUInt, rawFloat.sig << shift.asUInt).asSInt
+    qmn.value := Mux(rawFloat.sign, -mag, mag)
+    qmn
+  }
 }
 
 object FPType {
