@@ -38,7 +38,7 @@ sealed trait FPType {
     !sign && (exp > maxXExp || (exp === maxXExp && frac > maxXSig))
   }
 
-  // assumes no special cases and no overflow
+  // assumes no special cases and no overflow. no rounding
   def qmnFromRawFloat(rawFloat: RawFloat): Qmn = {
     val shift = qmnN.asSInt + rawFloat.sExp - (sigWidth - 1).asSInt
     val qmn = Wire(qmnCtor())

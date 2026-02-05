@@ -67,6 +67,13 @@ class FPEX(fpT: FPType, numLanes: Int = 4, tagWidth: Int = 1)
   val stage1Valid = RegNext(io.req.fire && !earlyTerminate)
   val stage1RawFloatVec = RegEnable(VecInit(rawFloatVec.map(_.negate(io.req.bits.neg))),
     io.req.fire && !earlyTerminate)
+  val stage1Qmn = VecInit(stage1RawFloatVec.map(x => fpT.qmnFromRawFloat(x)))
+
+  //stage 2
+  val stage2Valid = RegNext(stage1Valid)
+  val stage2Qmn = RegEnable(stage1Qmn, stage1Valid)
+  val xrln2Vec = VecInit(stage2Qmn.map(_.mul(fpT.rln2)))
+
 
   io.req.ready := state === FPEXState.READY
   io.resp.valid := state === FPEXState.DONE
