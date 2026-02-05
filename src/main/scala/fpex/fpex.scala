@@ -27,23 +27,22 @@ trait HasFPEXParams {
     }
   }
 
-  // get signless zero
+  // get pos zero
   def constructZero(fmt: FPFormat.Type): UInt = {
     fmt match {
-      case FPFormat.FP32 => Cat(Fill(8, 0.U(1.W)), Fill(23, 0.U(1.W)))
-      case FPFormat.FP16 => Cat(Fill(5, 0.U(1.W)), Fill(10, 0.U(1.W)))
-      case FPFormat.BF16 => Cat(Fill(8, 0.U(1.W)), Fill(7, 0.U(1.W)))
-      case _ => Cat(Fill(8, 0.U(1.W)), Fill(23, 0.U(1.W)))
+      case FPFormat.FP32 => Cat(0.U(1.W), Fill(8, 0.U(1.W)), Fill(23, 0.U(1.W)))
+      case FPFormat.FP16 => Cat(0.U(1.W), Fill(5, 0.U(1.W)), Fill(10, 0.U(1.W)))
+      case FPFormat.BF16 => Cat(0.U(1.W), Fill(8, 0.U(1.W)), Fill(7, 0.U(1.W)))
+      case _ => constructZero(FPFormat.FP32)
     }
   }
 
-  // get signless one
   def constructOne(fmt: FPFormat.Type): UInt = {
     fmt match {
-      case FPFormat.FP32 => Cat(127.U(8.W), 0.U(23.W))
-      case FPFormat.FP16 => Cat(15.U(5.W), 0.U(10.W))
-      case FPFormat.BF16 => Cat(127.U(8.W), 0.U(7.W))
-      case _ => Cat(127.U(8.W), 0.U(23.W))
+      case FPFormat.FP32 => Cat(0.U(1.W), 127.U(8.W), 0.U(23.W))
+      case FPFormat.FP16 => Cat(0.U(1.W), 15.U(5.W), 0.U(10.W))
+      case FPFormat.BF16 => Cat(0.U(1.W), 127.U(8.W), 0.U(7.W))
+      case _ => constructOne(FPFormat.FP32)
     }
   }
 
@@ -53,7 +52,7 @@ trait HasFPEXParams {
       case FPFormat.FP32 => Cat(Fill(8, 1.U(1.W)), 0.U(23.W))
       case FPFormat.FP16 => Cat(Fill(5, 1.U(1.W)), 0.U(10.W))
       case FPFormat.BF16 => Cat(Fill(8, 1.U(1.W)), 0.U(7.W))
-      case _ => Cat(Fill(8, 1.U(1.W)), 0.U(23.W))
+      case _ => constructInf(FPFormat.FP32)
     }
   }
 }
@@ -94,36 +93,28 @@ class FPEX(fmt: FPFormat.Type, numLanes: Int = 4, tagWidth: Int = 1)
 
   val state = RegInit(FPEXState.READY)
   val req = Reg(new FPEXReq(wordWidth, numLanes, tagWidth))
-  val res = Reg(Vec(numLanes, UInt(wordWidth.W)))
   val recFnVec = VecInit(io.req.bits.xVec.map(x => recFNFromFN(expWidth, sigWidth, x)))
+  val res = Reg(Vec(numLanes, UInt(wordWidth.W)))
   val busy = state === FPEXState.BUSY
 
-  //stage 1: special case check and raw float decomposition
+  //stage 0: special case check and raw float decomposition
   val rawFloatVec = VecInit(recFnVec.map(x => rawFloatFromRecFN(expWidth, sigWidth, x)))
   val earlyRes = VecInit(rawFloatVec.zipWithIndex.map { case (x, i) =>
     MuxCase(
       0.U(wordWidth.W),
       Seq(
         x.isNaN -> Cat(x.sign, naNExp, isSigNaNRawFloat(x), naNSig),
-        x.isZero -> Cat(x.sign, one),
-        (x.isInf && x.sign) -> Cat(x.sign, zero),
+        x.isZero -> one,
+        (x.isInf && x.sign) -> zero,
         (x.isInf && !x.sign) -> Cat(x.sign, infinity)
       )
     )
   })
-  val earlyValid = VecInit(rawFloatVec.map(x => x.isInf || x.isZero || x.isInf || x.isNaN))
+  val earlyValid = VecInit(rawFloatVec.map(x => x.isInf || x.isZero || x.isNaN))
   val earlyTerminate = earlyValid.asUInt.andR
 
-  //stage 2
-  val stage2Valid = RegNext(busy && !earlyTerminate)
-
-  state := MuxCase(state, Seq(
-      (earlyTerminate && busy) -> FPEXState.DONE,
-      io.req.fire -> FPEXState.BUSY,
-      io.resp.fire -> FPEXState.READY
-    )
-  )
-  res := Mux(busy && earlyTerminate, earlyRes, res)
+  //stage 1
+  val stage1Valid = RegNext(io.req.fire && !earlyTerminate)
 
   io.req.ready := state === FPEXState.READY
   io.resp.valid := state === FPEXState.DONE
@@ -133,5 +124,12 @@ class FPEX(fmt: FPFormat.Type, numLanes: Int = 4, tagWidth: Int = 1)
 
   when (io.req.fire) {
     req := io.req.bits
+    state := FPEXState.BUSY
+    when (earlyTerminate) {
+      res := earlyRes
+      state := FPEXState.DONE
+    }
+  }.elsewhen (io.resp.fire) {
+    state := FPEXState.READY
   }
 }
