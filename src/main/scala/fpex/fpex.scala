@@ -55,7 +55,7 @@ class FPEX(fpT: FPType, numLanes: Int = 4, tagWidth: Int = 1)
         x.isNaN -> Cat(x.sign, fpT.nanExp, isSigNaNRawFloat(x), fpT.nanSig),
         (x.isZero || x.isSubNorm) -> fpT.one,
         (x.isInf && x.sign) -> fpT.zero,
-        ((x.isInf && !x.sign) || of) -> Cat(x.sign, fpT.infinity)
+        ((x.isInf && !x.sign) || of) -> Cat(0.U(1.W), fpT.infinity)
       )
     )
   })
