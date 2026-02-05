@@ -111,7 +111,7 @@ class FPEX(fmt: FPFormat.Type, numLanes: Int = 4, tagWidth: Int = 1)
       )
     )
   })
-  val earlyValid = VecInit(rawFloatVec.map(x => x.isInf || x.isZero || x.isInf))
+  val earlyValid = VecInit(rawFloatVec.map(x => x.isInf || x.isZero || x.isInf || x.isNaN))
   val earlyTerminate = earlyValid.asUInt.andR
 
   //stage 2
