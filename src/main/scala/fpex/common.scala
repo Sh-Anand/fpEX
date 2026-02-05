@@ -2,6 +2,7 @@ package fpex
 
 import chisel3._
 import chisel3.util._
+import hardfloat.RawFloat
 
 object FPRoundingMode extends ChiselEnum {
   val RNE = Value("b000".U)
@@ -20,6 +21,8 @@ sealed trait FPType {
   def rln2: UInt
   def qmnM: Int
   def qmnN: Int
+  def maxXExp: UInt // ln(max finite) exponent
+  def maxXFrac: UInt // ln(max finite) fraction
   def bias: Int = (1 << (expWidth - 1)) - 1
   def nanExp = Fill(expWidth, 1.U(1.W))
   def nanSig = Fill(sigWidth - 2, 1.U(1.W))
@@ -37,6 +40,8 @@ object FPType {
     val rln2 = "h3fb8aa3b".U(32.W) // 1/ln2
     val qmnM = 10
     val qmnN = 18
+    val maxXExp = "h85".U(8.W)
+    val maxXFrac = "h317218".U(23.W)
   }
 
   case object FP16T extends FPType {
@@ -46,6 +51,8 @@ object FPType {
     val rln2 = "h3dc5".U(16.W) // 1/ln2
     val qmnM = 6
     val qmnN = 12
+    val maxXExp = "h12".U(5.W)
+    val maxXFrac = "h18c".U(10.W)
   }
 
   case object BF16T extends FPType {
@@ -55,5 +62,7 @@ object FPType {
     val rln2 = "h3fb9".U(16.W) // 1/ln2 (bf16, RNE)
     val qmnM = 9
     val qmnN = 12
+    val maxXExp = "h85".U(8.W)
+    val maxXFrac = "h31".U(7.W)
   }
 }
