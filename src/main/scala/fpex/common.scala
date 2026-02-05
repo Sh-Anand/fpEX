@@ -18,7 +18,7 @@ sealed trait FPType {
   def wordWidth: Int
   def expWidth: Int
   def sigWidth: Int // includes hidden bit
-  def rln2: UInt
+  def rln2: Qmn
   def qmnM: Int
   def qmnN: Int
   def maxXExp: UInt // ln(max finite) exponent
@@ -53,9 +53,9 @@ object FPType {
     val wordWidth = 32
     val expWidth = 8
     val sigWidth = 24
-    val rln2 = "h3fb8aa3b".U(wordWidth.W) // 1/ln2
     val qmnM = 10
     val qmnN = 18
+    def rln2 = new Qmn(2, qmnN)(378194.S((2 + qmnN).W)) // 1/ln2 in Q2.18
     val maxXExp = "h85".U(expWidth.W)
     val maxXSig = "h317218".U((sigWidth - 1).W)
   }
@@ -64,9 +64,9 @@ object FPType {
     val wordWidth = 16
     val expWidth = 5
     val sigWidth = 11
-    val rln2 = "h3dc5".U(wordWidth.W) // 1/ln2
     val qmnM = 6
     val qmnN = 12
+    def rln2 = new Qmn(2, qmnN)(5909.S((2 + qmnN).W)) // 1/ln2 in Q2.12
     val maxXExp = "h12".U(expWidth.W)
     val maxXSig = "h18c".U((sigWidth - 1).W)
   }
@@ -75,9 +75,9 @@ object FPType {
     val wordWidth = 16
     val expWidth = 8
     val sigWidth = 8
-    val rln2 = "h3fb9".U(wordWidth.W) // 1/ln2 (bf16, RNE)
     val qmnM = 9
     val qmnN = 12
+    def rln2 = new Qmn(2, qmnN)(5909.S((2 + qmnN).W)) // 1/ln2 in Q2.12
     val maxXExp = "h85".U(8.W)
     val maxXSig = "h31".U((sigWidth - 1).W)
   }
