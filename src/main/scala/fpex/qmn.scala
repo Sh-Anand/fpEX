@@ -11,17 +11,11 @@ class Qmn(val m: Int, val n: Int) extends Bundle {
     q
   }
 
-  // round to nearest even
+  // truncate toward zero. assumes multiplicand n is same as us
   def mul(qkn: Qmn): Qmn = {
-    val prod = Wire(SInt((m + qkn.m + n + n).W))
-    prod := value * qkn.value
-    val neg = prod < 0.S
-    val mag = Mux(neg, (-prod).asUInt, prod.asUInt)
-    val roundedMag = (mag + (1.U << (n - 1))) >> n
-    val roundedMagTrunc = roundedMag(m + qkn.m + n - 1, 0)
-    val rounded = Mux(neg, -roundedMagTrunc.asSInt, roundedMagTrunc.asSInt)
-    val res = new Qmn(m + qkn.m, n)(rounded)
-    res
+    assert(n == qkn.n)
+    val prod = ((value * qkn.value) >> n).asSInt
+    new Qmn(m + qkn.m, n)(prod)
   }
 
   // get integer and fractional parts
