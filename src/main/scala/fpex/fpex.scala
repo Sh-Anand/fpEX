@@ -83,17 +83,21 @@ class FPEX(fpT: FPType, numLanes: Int = 4, tagWidth: Int = 1)
   val stage3Valid = RegNext(stage2Valid)
   val stage3kVec = RegNext(stage2kVec)
   val stage3rVec = RegNext(stage2rVec)
+  val stage3AddrVec = VecInit(stage3rVec.map(r => r(fpT.qmnN - 1, rLowBits)))
   val rLowerVec = VecInit(stage3rVec.map(r => r(rLowBits - 1, 0)))
 
   //stage 4: lut ready r[top] + 1, interpolate
   val stage4Valid = RegNext(stage3Valid)
   val stage4kVec = RegNext(stage3kVec)
   val stage4rLowerVec = RegNext(rLowerVec)
+  val stage4AddrVec = RegNext(stage3AddrVec)
   val y0 = RegNext(lut.io.rdata(0))
   val y1 = lut.io.rdata(1)
-  val pow2r = VecInit(y0.zip(y1).zip(stage4rLowerVec).map {
-    case ((y0, y1), frac) =>
-      val delta = y1 - y0
+  val lutTopEndpoint = ((BigInt(1) << (fpT.lutValM + fpT.lutValN)) - 1).U((fpT.lutValM + fpT.lutValN).W)
+  val pow2r = VecInit(y0.zip(y1).zip(stage4rLowerVec).zip(stage4AddrVec).map {
+    case (((y0, y1), frac), addr) =>
+      val y1Interp = Mux(addr === ((1 << fpT.lutAddrBits) - 1).U, lutTopEndpoint, y1)
+      val delta = y1Interp - y0
       val interp = y0 + ((delta * frac) >> rLowBits)
       interp
   })
