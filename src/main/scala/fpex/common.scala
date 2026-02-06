@@ -83,7 +83,7 @@ object FPType {
     def rln2 = new Qmn(2, qmnN)(24204406.S((2 + qmnN).W)) // 1/ln2 in Q2.24
     val maxXExp = "h85".U(expWidth.W)
     val maxXSig = "h317218".U((sigWidth - 1).W)
-    val lutAddrBits = 6
+    val lutAddrBits = 9
     val lutValN = 30
   }
 
