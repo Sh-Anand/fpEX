@@ -30,6 +30,9 @@ sealed trait FPType {
   def one = Cat(0.U(1.W), bias.U(expWidth.W), 0.U((sigWidth - 1).W))
   def infinity = Cat(Fill(expWidth, 1.U(1.W)), 0.U((sigWidth - 1).W))
   def qmnCtor = () => new Qmn(qmnM, qmnN)
+  def lutAddrBits: Int
+  def lutValM: Int = 1
+  def lutValN: Int
 
   def expFPIsInf(in: UInt, neg: Bool): Bool = {
     val sign = in(wordWidth - 1) ^ neg
@@ -54,10 +57,12 @@ object FPType {
     val expWidth = 8
     val sigWidth = 24
     val qmnM = 10
-    val qmnN = 18
+    val qmnN = 24
     def rln2 = new Qmn(2, qmnN)(378194.S((2 + qmnN).W)) // 1/ln2 in Q2.18
     val maxXExp = "h85".U(expWidth.W)
     val maxXSig = "h317218".U((sigWidth - 1).W)
+    val lutAddrBits = 6
+    val lutValN = 30
   }
 
   case object FP16T extends FPType {
@@ -69,6 +74,8 @@ object FPType {
     def rln2 = new Qmn(2, qmnN)(5909.S((2 + qmnN).W)) // 1/ln2 in Q2.12
     val maxXExp = "h12".U(expWidth.W)
     val maxXSig = "h18c".U((sigWidth - 1).W)
+    val lutAddrBits = 6
+    val lutValN = 16
   }
 
   case object BF16T extends FPType {
@@ -80,5 +87,7 @@ object FPType {
     def rln2 = new Qmn(2, qmnN)(5909.S((2 + qmnN).W)) // 1/ln2 in Q2.12
     val maxXExp = "h85".U(8.W)
     val maxXSig = "h31".U((sigWidth - 1).W)
+    val lutAddrBits = 5
+    val lutValN = 16
   }
 }
