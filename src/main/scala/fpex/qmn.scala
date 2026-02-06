@@ -26,7 +26,7 @@ class Qmn(val m: Int, val n: Int) extends Bundle {
 
   // get integer and fractional parts
   def getKR = {
-    val k = value >> n
+    val k = (value >> n).asSInt
     val r = value(n - 1, 0).asUInt
     (k, r)
   }
