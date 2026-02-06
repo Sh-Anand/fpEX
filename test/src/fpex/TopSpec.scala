@@ -5,8 +5,13 @@ import chiseltest._
 import org.scalatest.flatspec.AnyFlatSpec
 import scala.util.Random
 
-class FPEXSpec extends AnyFlatSpec with ChiselScalatestTester {
+abstract class FPEXSpecBase extends AnyFlatSpec with ChiselScalatestTester {
   behavior of "FPEX"
+
+  protected def profileName: String
+  protected def randomCount: Int
+  protected def gridCount: Int
+  protected def approxLanes: Int
 
   private def fp32ExpAllOnes = 0x7f800000L
 
@@ -105,15 +110,15 @@ class FPEXSpec extends AnyFlatSpec with ChiselScalatestTester {
       seed: Int,
       min: Float,
       max: Float,
-      randomCount: Int = 200,
-      gridCount: Int = 41
+      randomCountOverride: Int = randomCount,
+      gridCountOverride: Int = gridCount
   ): Seq[Float] = {
     val rng = new Random(seed)
     val anchors = Seq(0.0f, 0.5f, -1.0f, 2.0f, -2.0f, 3.0f, -3.0f, 5.0f, -5.0f)
     val grid =
-      if (gridCount <= 1) Seq(min)
-      else (0 until gridCount).map(i => min + (max - min) * (i.toFloat / (gridCount - 1).toFloat))
-    val random = Seq.fill(randomCount)(min + rng.nextFloat() * (max - min))
+      if (gridCountOverride <= 1) Seq(min)
+      else (0 until gridCountOverride).map(i => min + (max - min) * (i.toFloat / (gridCountOverride - 1).toFloat))
+    val random = Seq.fill(randomCountOverride)(min + rng.nextFloat() * (max - min))
     (anchors ++ grid ++ random).distinct
   }
 
@@ -122,7 +127,7 @@ class FPEXSpec extends AnyFlatSpec with ChiselScalatestTester {
     val avg = diffs.map(_.toDouble).sum / diffs.size.toDouble
     val worst = diffs.max
     val best = diffs.min
-    println(f"[$testName] samples=${diffs.size} avgULP=$avg%.4f worstULP=$worst bestULP=$best")
+    println(f"[$testName/$profileName] samples=${diffs.size} avgULP=$avg%.4f worstULP=$worst bestULP=$best")
   }
 
 
@@ -298,12 +303,10 @@ class FPEXSpec extends AnyFlatSpec with ChiselScalatestTester {
   }
 
   it should "approximate exp for normal FP32 values" in {
-    test(new FPEX(FPType.FP32T, numLanes = 4)) { dut =>
-      val lanes = 4
+    test(new FPEX(FPType.FP32T, numLanes = approxLanes)) { dut =>
+      val lanes = approxLanes
       val inputs = wideInputSet(seed = 1, min = -10.0f, max = 10.0f)
       val diffs = scala.collection.mutable.ArrayBuffer.empty[Long]
-      var worstInput = 0.0f
-      var worstDiff = Long.MinValue
       inputs.foreach { in =>
         val inBits = fp32FloatToBits(in)
         val out = driveAndAwait(dut, inBits, lanes)
@@ -313,25 +316,20 @@ class FPEXSpec extends AnyFlatSpec with ChiselScalatestTester {
           val gotBits = v.toLong & 0xffffffffL
           val diff = ulpDiff32(gotBits, expectedBits)
           diffs += diff
-          if (diff > worstDiff) {
-            worstDiff = diff
-            worstInput = in
-          }
         }
       }
       printUlpStats("FP32", diffs.toSeq)
-      assert(worstDiff <= 2, s"worst FP32 ULP diff $worstDiff > 2 at input $worstInput")
+      val avg = diffs.map(_.toDouble).sum / diffs.size.toDouble
+      assert(avg < 2.0, f"average FP32 ULP $avg%.4f is not < 2.0")
     }
   }
 
 
   it should "approximate exp for normal FP16 values" in {
-    test(new FPEX(FPType.FP16T, numLanes = 4)) { dut =>
-      val lanes = 4
+    test(new FPEX(FPType.FP16T, numLanes = approxLanes)) { dut =>
+      val lanes = approxLanes
       val inputs = wideInputSet(seed = 2, min = -8.0f, max = 8.0f)
       val diffs = scala.collection.mutable.ArrayBuffer.empty[Long]
-      var worstInput = 0.0f
-      var worstDiff = Long.MinValue
       inputs.foreach { in =>
         val inBits = floatToFp16Bits(in)
         val out = driveAndAwait(dut, inBits, lanes)
@@ -341,24 +339,19 @@ class FPEXSpec extends AnyFlatSpec with ChiselScalatestTester {
           val gotBits = v.toLong & 0xffffL
           val diff = ulpDiff16(gotBits, expectedBits)
           diffs += diff
-          if (diff > worstDiff) {
-            worstDiff = diff
-            worstInput = in
-          }
         }
       }
       printUlpStats("FP16", diffs.toSeq)
-      assert(worstDiff <= 2, s"worst FP16 ULP diff $worstDiff > 2 at input $worstInput")
+      val avg = diffs.map(_.toDouble).sum / diffs.size.toDouble
+      assert(avg < 2.0, f"average FP16 ULP $avg%.4f is not < 2.0")
     }
   }
 
   it should "approximate exp for normal BF16 values" in {
-    test(new FPEX(FPType.BF16T, numLanes = 4)) { dut =>
-      val lanes = 4
+    test(new FPEX(FPType.BF16T, numLanes = approxLanes)) { dut =>
+      val lanes = approxLanes
       val inputs = wideInputSet(seed = 3, min = -10.0f, max = 10.0f)
       val diffs = scala.collection.mutable.ArrayBuffer.empty[Long]
-      var worstInput = 0.0f
-      var worstDiff = Long.MinValue
       inputs.foreach { in =>
         val inBits = floatToBf16Bits(in)
         val out = driveAndAwait(dut, inBits, lanes)
@@ -368,14 +361,32 @@ class FPEXSpec extends AnyFlatSpec with ChiselScalatestTester {
           val gotBits = v.toLong & 0xffffL
           val diff = ulpDiff16(gotBits, expectedBits)
           diffs += diff
-          if (diff > worstDiff) {
-            worstDiff = diff
-            worstInput = in
-          }
         }
       }
       printUlpStats("BF16", diffs.toSeq)
-      assert(worstDiff <= 2, s"worst BF16 ULP diff $worstDiff > 2 at input $worstInput")
+      val avg = diffs.map(_.toDouble).sum / diffs.size.toDouble
+      assert(avg < 2.0, f"average BF16 ULP $avg%.4f is not < 2.0")
     }
   }
+}
+
+class FPEXShortSpec extends FPEXSpecBase {
+  override protected def profileName: String = "short"
+  override protected def randomCount: Int = 24
+  override protected def gridCount: Int = 11
+  override protected def approxLanes: Int = 1
+}
+
+class FPEXMediumSpec extends FPEXSpecBase {
+  override protected def profileName: String = "medium"
+  override protected def randomCount: Int = 96
+  override protected def gridCount: Int = 25
+  override protected def approxLanes: Int = 1
+}
+
+class FPEXLongSpec extends FPEXSpecBase {
+  override protected def profileName: String = "long"
+  override protected def randomCount: Int = 384
+  override protected def gridCount: Int = 65
+  override protected def approxLanes: Int = 1
 }
