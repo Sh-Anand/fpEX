@@ -101,6 +101,30 @@ class FPEXSpec extends AnyFlatSpec with ChiselScalatestTester {
     (oa - ob).abs
   }
 
+  private def wideInputSet(
+      seed: Int,
+      min: Float,
+      max: Float,
+      randomCount: Int = 200,
+      gridCount: Int = 41
+  ): Seq[Float] = {
+    val rng = new Random(seed)
+    val anchors = Seq(0.0f, 0.5f, -1.0f, 2.0f, -2.0f, 3.0f, -3.0f, 5.0f, -5.0f)
+    val grid =
+      if (gridCount <= 1) Seq(min)
+      else (0 until gridCount).map(i => min + (max - min) * (i.toFloat / (gridCount - 1).toFloat))
+    val random = Seq.fill(randomCount)(min + rng.nextFloat() * (max - min))
+    (anchors ++ grid ++ random).distinct
+  }
+
+  private def printUlpStats(testName: String, diffs: Seq[Long]): Unit = {
+    require(diffs.nonEmpty, s"$testName had no samples")
+    val avg = diffs.map(_.toDouble).sum / diffs.size.toDouble
+    val worst = diffs.max
+    val best = diffs.min
+    println(f"[$testName] samples=${diffs.size} avgULP=$avg%.4f worstULP=$worst bestULP=$best")
+  }
+
 
   it should "handle special cases (FP32)" in {
     test(new FPEX(FPType.FP32T, numLanes = 4)) { dut =>
@@ -276,8 +300,10 @@ class FPEXSpec extends AnyFlatSpec with ChiselScalatestTester {
   it should "approximate exp for normal FP32 values" in {
     test(new FPEX(FPType.FP32T, numLanes = 4)) { dut =>
       val lanes = 4
-      val rng = new Random(1)
-      val inputs = Seq(0.5f, -1.0f, 2.0f) ++ Seq.fill(10)((rng.nextDouble() * 6.0 - 3.0).toFloat)
+      val inputs = wideInputSet(seed = 1, min = -10.0f, max = 10.0f)
+      val diffs = scala.collection.mutable.ArrayBuffer.empty[Long]
+      var worstInput = 0.0f
+      var worstDiff = Long.MinValue
       inputs.foreach { in =>
         val inBits = fp32FloatToBits(in)
         val out = driveAndAwait(dut, inBits, lanes)
@@ -286,9 +312,15 @@ class FPEXSpec extends AnyFlatSpec with ChiselScalatestTester {
         out.foreach { v =>
           val gotBits = v.toLong & 0xffffffffL
           val diff = ulpDiff32(gotBits, expectedBits)
-          assert(diff <= 2, s"exp($in) ULP diff $diff > 2")
+          diffs += diff
+          if (diff > worstDiff) {
+            worstDiff = diff
+            worstInput = in
+          }
         }
       }
+      printUlpStats("FP32", diffs.toSeq)
+      assert(worstDiff <= 2, s"worst FP32 ULP diff $worstDiff > 2 at input $worstInput")
     }
   }
 
@@ -296,8 +328,10 @@ class FPEXSpec extends AnyFlatSpec with ChiselScalatestTester {
   it should "approximate exp for normal FP16 values" in {
     test(new FPEX(FPType.FP16T, numLanes = 4)) { dut =>
       val lanes = 4
-      val rng = new Random(2)
-      val inputs = Seq(0.5f, -1.0f, 2.0f) ++ Seq.fill(10)((rng.nextDouble() * 6.0 - 3.0).toFloat)
+      val inputs = wideInputSet(seed = 2, min = -8.0f, max = 8.0f)
+      val diffs = scala.collection.mutable.ArrayBuffer.empty[Long]
+      var worstInput = 0.0f
+      var worstDiff = Long.MinValue
       inputs.foreach { in =>
         val inBits = floatToFp16Bits(in)
         val out = driveAndAwait(dut, inBits, lanes)
@@ -306,17 +340,25 @@ class FPEXSpec extends AnyFlatSpec with ChiselScalatestTester {
         out.foreach { v =>
           val gotBits = v.toLong & 0xffffL
           val diff = ulpDiff16(gotBits, expectedBits)
-          assert(diff <= 2, s"exp($in) ULP diff $diff > 2")
+          diffs += diff
+          if (diff > worstDiff) {
+            worstDiff = diff
+            worstInput = in
+          }
         }
       }
+      printUlpStats("FP16", diffs.toSeq)
+      assert(worstDiff <= 2, s"worst FP16 ULP diff $worstDiff > 2 at input $worstInput")
     }
   }
 
   it should "approximate exp for normal BF16 values" in {
     test(new FPEX(FPType.BF16T, numLanes = 4)) { dut =>
       val lanes = 4
-      val rng = new Random(3)
-      val inputs = Seq(0.5f, -1.0f, 2.0f) ++ Seq.fill(10)((rng.nextDouble() * 6.0 - 3.0).toFloat)
+      val inputs = wideInputSet(seed = 3, min = -10.0f, max = 10.0f)
+      val diffs = scala.collection.mutable.ArrayBuffer.empty[Long]
+      var worstInput = 0.0f
+      var worstDiff = Long.MinValue
       inputs.foreach { in =>
         val inBits = floatToBf16Bits(in)
         val out = driveAndAwait(dut, inBits, lanes)
@@ -325,9 +367,15 @@ class FPEXSpec extends AnyFlatSpec with ChiselScalatestTester {
         out.foreach { v =>
           val gotBits = v.toLong & 0xffffL
           val diff = ulpDiff16(gotBits, expectedBits)
-          assert(diff <= 2, s"exp($in) ULP diff $diff > 2")
+          diffs += diff
+          if (diff > worstDiff) {
+            worstDiff = diff
+            worstInput = in
+          }
         }
       }
+      printUlpStats("BF16", diffs.toSeq)
+      assert(worstDiff <= 2, s"worst BF16 ULP diff $worstDiff > 2 at input $worstInput")
     }
   }
 }
