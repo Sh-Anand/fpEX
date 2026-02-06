@@ -43,11 +43,33 @@ sealed trait FPType {
 
   // assumes no special cases and no overflow. no rounding
   def qmnFromRawFloat(rawFloat: RawFloat): Qmn = {
-    val shift = qmnN.asSInt + rawFloat.sExp - (sigWidth - 1).asSInt
+    val recodedBias = (1 << expWidth).S((expWidth + 2).W)
+    val unbiasedExp = rawFloat.sExp - recodedBias
+    val shift = qmnN.asSInt + unbiasedExp - (sigWidth - 1).asSInt
     val qmn = Wire(qmnCtor())
-    val mag = Mux(shift < 0.S, rawFloat.sig >> (-shift).asUInt, rawFloat.sig << shift.asUInt).asSInt
+    val sigWide = Wire(UInt((qmnM + qmnN).W))
+    sigWide := rawFloat.sig
+    val mag = Mux(shift < 0.S, sigWide >> (-shift).asUInt, sigWide << shift.asUInt).asSInt
     qmn.value := Mux(rawFloat.sign, -mag, mag)
     qmn
+  }
+
+  // sign is always positive, lazy so setting it to false
+  def rawFloatFromQmnK(qmn: UInt, k: SInt) = {
+    val out = Wire(new RawFloat(expWidth, sigWidth + 2))
+    out.isNaN := false.B
+    out.isInf := false.B
+    out.isZero := false.B
+    out.isSubNorm := false.B
+    out.sign := false.B
+
+    val expBias = (1 << expWidth).S((expWidth + 2).W)
+    out.sExp := k + expBias
+
+    val shift = (lutValN - (sigWidth - 1)).asSInt
+    val sigMag = Mux(shift < 0.S, qmn << (-shift).asUInt, qmn >> shift.asUInt)
+    out.sig := Cat(0.U(1.W), sigMag(sigWidth - 1, 0), 0.U(2.W))
+    out
   }
 }
 
@@ -58,7 +80,7 @@ object FPType {
     val sigWidth = 24
     val qmnM = 10
     val qmnN = 24
-    def rln2 = new Qmn(2, qmnN)(378194.S((2 + qmnN).W)) // 1/ln2 in Q2.18
+    def rln2 = new Qmn(2, qmnN)(24204406.S((2 + qmnN).W)) // 1/ln2 in Q2.24
     val maxXExp = "h85".U(expWidth.W)
     val maxXSig = "h317218".U((sigWidth - 1).W)
     val lutAddrBits = 6
