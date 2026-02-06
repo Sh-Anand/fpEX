@@ -3,6 +3,7 @@ package fpex
 import chisel3._
 import chiseltest._
 import org.scalatest.flatspec.AnyFlatSpec
+import scala.util.Random
 
 class FPEXSpec extends AnyFlatSpec with ChiselScalatestTester {
   behavior of "FPEX"
@@ -36,6 +37,70 @@ class FPEXSpec extends AnyFlatSpec with ChiselScalatestTester {
     dut.io.req.valid.poke(false.B)
     out
   }
+
+  private def fp32BitsToFloat(bits: BigInt): Float =
+    java.lang.Float.intBitsToFloat(bits.toInt)
+
+  private def fp32FloatToBits(f: Float): Long =
+    java.lang.Float.floatToIntBits(f).toLong & 0xffffffffL
+
+  private def ulpDiff32(aBits: Long, bBits: Long): Long = {
+    def ordered(x: Long): Long = {
+      val sign = (x >>> 31) & 1L
+      if (sign == 1L) (~x) & 0xffffffffL else x | 0x80000000L
+    }
+    val oa = ordered(aBits)
+    val ob = ordered(bBits)
+    (oa - ob).abs
+  }
+
+
+  private def bf16BitsToFloat(bits: BigInt): Float =
+    java.lang.Float.intBitsToFloat((bits.toInt & 0xffff) << 16)
+
+  private def floatToBf16Bits(f: Float): Long =
+    ((java.lang.Float.floatToIntBits(f) >>> 16) & 0xffff).toLong
+
+  private def fp16BitsToFloat(bits: BigInt): Float = {
+    val h = bits.toInt & 0xffff
+    val sign = (h >>> 15) & 0x1
+    val exp = (h >>> 10) & 0x1f
+    val frac = h & 0x3ff
+    val fexp =
+      if (exp == 0) 0
+      else if (exp == 0x1f) 0xff
+      else exp - 15 + 127
+    val ffrac =
+      if (exp == 0 || exp == 0x1f) frac << 13
+      else frac << 13
+    val fbits = (sign << 31) | (fexp << 23) | ffrac
+    java.lang.Float.intBitsToFloat(fbits)
+  }
+
+  private def floatToFp16Bits(f: Float): Long = {
+    val bits = java.lang.Float.floatToIntBits(f)
+    val sign = (bits >>> 31) & 0x1
+    val exp = (bits >>> 23) & 0xff
+    val frac = bits & 0x7fffff
+    val hexp =
+      if (exp == 0) 0
+      else if (exp == 0xff) 0x1f
+      else exp - 127 + 15
+    val hfrac = frac >>> 13
+    ((sign << 15) | ((hexp & 0x1f) << 10) | (hfrac & 0x3ff)).toLong
+  }
+
+  private def ulpDiff16(aBits: Long, bBits: Long): Long = {
+    def ordered(x: Long): Long = {
+      val sign = (x >>> 15) & 1L
+      val masked = x & 0xffffL
+      if (sign == 1L) (~masked) & 0xffffL else masked | 0x8000L
+    }
+    val oa = ordered(aBits)
+    val ob = ordered(bBits)
+    (oa - ob).abs
+  }
+
 
   it should "handle special cases (FP32)" in {
     test(new FPEX(FPType.FP32T, numLanes = 4)) { dut =>
@@ -205,6 +270,64 @@ class FPEXSpec extends AnyFlatSpec with ChiselScalatestTester {
       val negOverflowIn = 0xc2b2L
       val negOverflowOut = driveAndAwait(dut, negOverflowIn, lanes, neg = true)
       negOverflowOut.foreach(v => assert(v == posInf, s"expected +Inf, got 0x${v.toString(16)}"))
+    }
+  }
+
+  it should "approximate exp for normal FP32 values" in {
+    test(new FPEX(FPType.FP32T, numLanes = 4)) { dut =>
+      val lanes = 4
+      val rng = new Random(1)
+      val inputs = Seq(0.5f, -1.0f, 2.0f) ++ Seq.fill(10)((rng.nextDouble() * 6.0 - 3.0).toFloat)
+      inputs.foreach { in =>
+        val inBits = fp32FloatToBits(in)
+        val out = driveAndAwait(dut, inBits, lanes)
+        val quantIn = fp32BitsToFloat(inBits).toDouble
+        val expectedBits = fp32FloatToBits(math.exp(quantIn).toFloat)
+        out.foreach { v =>
+          val gotBits = v.toLong & 0xffffffffL
+          val diff = ulpDiff32(gotBits, expectedBits)
+          assert(diff <= 2, s"exp($in) ULP diff $diff > 2")
+        }
+      }
+    }
+  }
+
+
+  it should "approximate exp for normal FP16 values" in {
+    test(new FPEX(FPType.FP16T, numLanes = 4)) { dut =>
+      val lanes = 4
+      val rng = new Random(2)
+      val inputs = Seq(0.5f, -1.0f, 2.0f) ++ Seq.fill(10)((rng.nextDouble() * 6.0 - 3.0).toFloat)
+      inputs.foreach { in =>
+        val inBits = floatToFp16Bits(in)
+        val out = driveAndAwait(dut, inBits, lanes)
+        val quantIn = fp16BitsToFloat(inBits).toDouble
+        val expectedBits = floatToFp16Bits(math.exp(quantIn).toFloat)
+        out.foreach { v =>
+          val gotBits = v.toLong & 0xffffL
+          val diff = ulpDiff16(gotBits, expectedBits)
+          assert(diff <= 2, s"exp($in) ULP diff $diff > 2")
+        }
+      }
+    }
+  }
+
+  it should "approximate exp for normal BF16 values" in {
+    test(new FPEX(FPType.BF16T, numLanes = 4)) { dut =>
+      val lanes = 4
+      val rng = new Random(3)
+      val inputs = Seq(0.5f, -1.0f, 2.0f) ++ Seq.fill(10)((rng.nextDouble() * 6.0 - 3.0).toFloat)
+      inputs.foreach { in =>
+        val inBits = floatToBf16Bits(in)
+        val out = driveAndAwait(dut, inBits, lanes)
+        val quantIn = bf16BitsToFloat(inBits).toDouble
+        val expectedBits = floatToBf16Bits(math.exp(quantIn).toFloat)
+        out.foreach { v =>
+          val gotBits = v.toLong & 0xffffL
+          val diff = ulpDiff16(gotBits, expectedBits)
+          assert(diff <= 2, s"exp($in) ULP diff $diff > 2")
+        }
+      }
     }
   }
 }
