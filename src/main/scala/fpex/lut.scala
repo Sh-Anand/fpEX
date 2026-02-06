@@ -7,8 +7,8 @@ class ExLUT(ports: Int, addrBits: Int, m: Int, n: Int,
             min: Double = 0.0, max: Double = 1.0)
   extends Module {
   val io = IO(new Bundle {
-    val raddrs = Input(Vec(ports, UInt(addrBits.W)))
-    val rdata = Output(Vec(ports, UInt((m + n).W)))
+    val raddrs = Input(Vec(2, Vec(ports, UInt(addrBits.W))))
+    val rdata = Output(Vec(2, Vec(ports, UInt((m + n).W))))
   })
 
   val entries = 1 << addrBits
@@ -19,7 +19,11 @@ class ExLUT(ports: Int, addrBits: Int, m: Int, n: Int,
     scaled.U((m + n).W)
   }
 
-  val results = Reg(Vec(ports, UInt((m + n).W)))
-  results.zip(io.raddrs).foreach { case (res, raddr) => res := lut(raddr) }
-  io.rdata := results
+  val res = Reg(Vec(2, Vec(ports, UInt((m + n).W))))
+  res.zip(io.raddrs).foreach {
+    case (results, raddrs) => results.zip(raddrs).foreach {
+      case (result, raddr) => result := lut(raddr)
+    }
+  }
+  io.rdata := res
 }

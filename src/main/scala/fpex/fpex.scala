@@ -40,6 +40,7 @@ class FPEX(fpT: FPType, numLanes: Int = 4, tagWidth: Int = 1)
   val state = RegInit(FPEXState.READY)
   val req = Reg(new FPEXReq(fpT.wordWidth, numLanes, tagWidth))
   val res = Reg(Vec(numLanes, UInt(fpT.wordWidth.W)))
+  val lut = Module(new ExLUT(numLanes, fpT.lutAddrBits, fpT.lutValM, fpT.lutValN))
   val busy = state === FPEXState.BUSY
 
   //stage 0: special case check and raw float decomposition
@@ -69,13 +70,42 @@ class FPEX(fpT: FPType, numLanes: Int = 4, tagWidth: Int = 1)
   val stage1RawFloatVec = RegEnable(rawFloatVec, io.req.fire && !earlyTerminate)
   val stage1Qmn = VecInit(stage1RawFloatVec.map(x => fpT.qmnFromRawFloat(x)))
 
-  //stage 2: multiply x/ln2, extract k and r
+  //stage 2: multiply x/ln2, extract k and r, init lut read r[top]
   val stage2Valid = RegNext(stage1Valid)
   val stage2Qmn = RegEnable(stage1Qmn, stage1Valid)
   val xrln2KRVec = stage2Qmn.map(_.mul(fpT.rln2).getKR).unzip
-  val kVec = VecInit(xrln2KRVec._1)
-  val rVec = VecInit(xrln2KRVec._2)
+  val stage2kVec = VecInit(xrln2KRVec._1)
+  val stage2rVec = VecInit(xrln2KRVec._2)
 
+  //stage 3: lut ready r[top], init lut read r[top] + 1
+  val rLowBits = fpT.qmnN - fpT.lutAddrBits
+  val stage3Valid = RegNext(stage2Valid)
+  val stage3kVec = RegNext(stage2kVec)
+  val stage3rVec = RegNext(stage2rVec)
+  val rLower = VecInit(stage3rVec.map(r => r(rLowBits - 1, 0)))
+
+  //stage 4: lut ready r[top] + 1, interpolate
+  val stage4Valid = RegNext(stage3Valid)
+  val stage4kVec = RegNext(stage3kVec)
+  val stage4rLower = RegNext(rLower)
+  val y0 = RegNext(lut.io.rdata(0))
+  val y1 = lut.io.rdata(1)
+  val pow2r = VecInit(y0.zip(y1).zip(stage4rLower).map {
+    case ((y0, y1), frac) =>
+      val delta = (y1 - y0).asSInt
+      val interp = (y0.asSInt + ((delta * frac.asSInt) >> rLowBits)).asUInt
+      interp
+  })
+
+  //stage 5:
+  val stage5pow2r = RegNext(pow2r)
+
+  lut.io.raddrs(0) := stage2rVec.map(r => r(fpT.qmnN - 1, rLowBits))
+  lut.io.raddrs(1) := stage3rVec.map { r =>
+    val maxAddr = ((1 << fpT.lutAddrBits) - 1).U
+    val addr = r(fpT.qmnN - 1, rLowBits)
+    Mux(addr === maxAddr, addr, addr + 1.U)
+  }
 
   io.req.ready := state === FPEXState.READY
   io.resp.valid := state === FPEXState.DONE
