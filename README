@@ -2,5 +2,6 @@ Vector fp exponentiation module in chisel
 
 `./mill compile` compiles
 `./mill run` generates verilog in generated/*.v
-`./mill test` runs the test bench
+`./mill test.testOnly fpex.FPEX{SIZE}Spec` where SIZE = {Short, Medium, Large} runs the test bench
+example: ./mill test.testOnly fpex.FPEXShortSpec
 `./mill clean` to clean stale configs if you change anything
