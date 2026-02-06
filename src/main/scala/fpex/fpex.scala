@@ -16,7 +16,7 @@ object FPEXState extends ChiselEnum {
 }
 
 class FPEXReq(wordWidth: Int, numLanes: Int, tagWidth: Int) extends Bundle {
-  val roundingMode = FPRoundingMode()
+  val roundingMode = UInt(3.W)
   val tag = UInt(tagWidth.W)
   val neg = Bool() // 0 = e^x, 1 = e^-x
   val laneMask = UInt(numLanes.W)
@@ -41,6 +41,7 @@ class FPEX(fpT: FPType, numLanes: Int = 4, tagWidth: Int = 1)
   val req = Reg(new FPEXReq(fpT.wordWidth, numLanes, tagWidth))
   val res = Reg(Vec(numLanes, UInt(fpT.wordWidth.W)))
   val lut = Module(new ExLUT(numLanes, fpT.lutAddrBits, fpT.lutValM, fpT.lutValN))
+  val roundToRecFn = Seq.fill(numLanes)(Module(new RoundRawFNToRecFN(fpT.expWidth, fpT.sigWidth, 0)))
   val busy = state === FPEXState.BUSY
 
   //stage 0: special case check and raw float decomposition
@@ -82,23 +83,37 @@ class FPEX(fpT: FPType, numLanes: Int = 4, tagWidth: Int = 1)
   val stage3Valid = RegNext(stage2Valid)
   val stage3kVec = RegNext(stage2kVec)
   val stage3rVec = RegNext(stage2rVec)
-  val rLower = VecInit(stage3rVec.map(r => r(rLowBits - 1, 0)))
+  val rLowerVec = VecInit(stage3rVec.map(r => r(rLowBits - 1, 0)))
 
   //stage 4: lut ready r[top] + 1, interpolate
   val stage4Valid = RegNext(stage3Valid)
   val stage4kVec = RegNext(stage3kVec)
-  val stage4rLower = RegNext(rLower)
+  val stage4rLowerVec = RegNext(rLowerVec)
   val y0 = RegNext(lut.io.rdata(0))
   val y1 = lut.io.rdata(1)
-  val pow2r = VecInit(y0.zip(y1).zip(stage4rLower).map {
+  val pow2r = VecInit(y0.zip(y1).zip(stage4rLowerVec).map {
     case ((y0, y1), frac) =>
-      val delta = (y1 - y0).asSInt
-      val interp = (y0.asSInt + ((delta * frac.asSInt) >> rLowBits)).asUInt
+      val delta = y1 - y0
+      val interp = y0 + ((delta * frac) >> rLowBits)
       interp
   })
 
-  //stage 5:
-  val stage5pow2r = RegNext(pow2r)
+  //stage 5: convert and return result
+  val stage5Valid = RegNext(stage4Valid)
+  val stage5pow2rVec = RegNext(pow2r)
+  val stage5kVec = RegNext(stage4kVec)
+  val resRawFloat = stage5pow2rVec.zip(stage5kVec).map{ case (qmn, k) => fpT.rawFloatFromQmnK(qmn, k) }
+  roundToRecFn.zip(resRawFloat).foreach {
+    case (round, rawFloat) => {
+      round.io.invalidExc := false.B
+      round.io.infiniteExc := false.B
+      round.io.in := rawFloat
+      round.io.roundingMode := req.roundingMode
+      round.io.detectTininess := 0.U
+    }
+  }
+  val resFN = VecInit(roundToRecFn.map(round => fNFromRecFN(fpT.expWidth, fpT.sigWidth, round.io.out)))
+  res := Mux(stage5Valid, resFN, res)
 
   lut.io.raddrs(0) := stage2rVec.map(r => r(fpT.qmnN - 1, rLowBits))
   lut.io.raddrs(1) := stage3rVec.map { r =>
@@ -122,5 +137,7 @@ class FPEX(fpT: FPType, numLanes: Int = 4, tagWidth: Int = 1)
     }
   }.elsewhen (io.resp.fire) {
     state := FPEXState.READY
+  }.elsewhen(stage5Valid) {
+    state := FPEXState.DONE
   }
 }
