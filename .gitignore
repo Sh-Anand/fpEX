@@ -2,3 +2,6 @@ out/
 generated/
 .bsp
 .idea
+.history
+.metals
+.vscode
