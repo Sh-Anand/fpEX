@@ -45,6 +45,7 @@ class FPEX(fpT: FPType, numLanes: Int = 4, tagWidth: Int = 1)
 
   //stage 0: special case check and raw float decomposition
   //flush subnormals to zero, ignore x for which e^x = inf
+  val laneEnable = io.req.bits.laneMask & VecInit.fill(numLanes)(io.req.fire).asUInt
   val rawFloatVec = VecInit(io.req.bits.xVec.map(
     x => rawFloatFromFN(fpT.expWidth, fpT.sigWidth, x).negate(io.req.bits.neg)))
   val expFPOverflow = VecInit(io.req.bits.xVec.map(x => fpT.expFPIsInf(x, io.req.bits.neg)))
