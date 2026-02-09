@@ -25,17 +25,21 @@ abstract class FPEXSpecBase extends AnyFlatSpec with ChiselScalatestTester {
 
   private def initializeInterface(dut: FPEX, lanes: Int, drainCycles: Int = 8): Unit = {
     dut.io.req.valid.poke(false.B)
+    dut.io.req.bits.roundingMode.poke(0.U)
+    dut.io.req.bits.tag.poke(0.U)
     dut.io.req.bits.neg.poke(false.B)
     dut.io.req.bits.laneMask.poke(((1 << lanes) - 1).U)
     for (i <- 0 until lanes) {
       dut.io.req.bits.xVec(i).poke(0.U)
     }
     dut.io.resp.ready.poke(true.B)
-    dut.clock.step(drainCycles)
+    if (drainCycles > 0) dut.clock.step(drainCycles)
   }
 
   private def driveAndAwait(dut: FPEX, value: Long, lanes: Int, neg: Boolean = false, maxCycles: Int = 64): Seq[BigInt] = {
     dut.io.resp.ready.poke(true.B)
+    dut.io.req.bits.roundingMode.poke(0.U)
+    dut.io.req.bits.tag.poke(0.U)
     dut.io.req.bits.neg.poke(neg.B)
     dut.io.req.bits.laneMask.poke(((1 << lanes) - 1).U)
     for (i <- 0 until lanes) {
@@ -65,6 +69,8 @@ abstract class FPEXSpecBase extends AnyFlatSpec with ChiselScalatestTester {
   private def driveAndAwaitVec(dut: FPEX, values: Seq[Long], neg: Boolean = false, maxCycles: Int = 64): Seq[BigInt] = {
     val lanes = values.size
     dut.io.resp.ready.poke(true.B)
+    dut.io.req.bits.roundingMode.poke(0.U)
+    dut.io.req.bits.tag.poke(0.U)
     dut.io.req.bits.neg.poke(neg.B)
     dut.io.req.bits.laneMask.poke(((1 << lanes) - 1).U)
     values.zipWithIndex.foreach { case (value, i) =>
@@ -89,6 +95,44 @@ abstract class FPEXSpecBase extends AnyFlatSpec with ChiselScalatestTester {
     val out = for (i <- 0 until lanes) yield dut.io.resp.bits.result(i).peek().litValue
     dut.clock.step()
     out
+  }
+
+  private def driveAndAwaitVecMasked(
+      dut: FPEX,
+      values: Seq[Long],
+      laneMask: Int,
+      neg: Boolean = false,
+      maxCycles: Int = 64
+  ): (BigInt, Seq[BigInt]) = {
+    val lanes = values.size
+    dut.io.resp.ready.poke(true.B)
+    dut.io.req.bits.roundingMode.poke(0.U)
+    dut.io.req.bits.tag.poke(0.U)
+    dut.io.req.bits.neg.poke(neg.B)
+    dut.io.req.bits.laneMask.poke(laneMask.U)
+    values.zipWithIndex.foreach { case (value, i) =>
+      dut.io.req.bits.xVec(i).poke(value.U)
+    }
+    dut.io.req.valid.poke(true.B)
+    var reqCycles = 0
+    while (reqCycles < maxCycles && !dut.io.req.ready.peek().litToBoolean) {
+      dut.clock.step()
+      reqCycles += 1
+    }
+    assert(dut.io.req.ready.peek().litToBoolean, "request was not accepted (req.ready stayed low)")
+    dut.clock.step()
+    dut.io.req.valid.poke(false.B)
+
+    var respCycles = 0
+    while (respCycles < maxCycles && !dut.io.resp.valid.peek().litToBoolean) {
+      dut.clock.step()
+      respCycles += 1
+    }
+    assert(dut.io.resp.valid.peek().litToBoolean, "response did not become valid")
+    val outMask = dut.io.resp.bits.laneMask.peek().litValue
+    val out = for (i <- 0 until lanes) yield dut.io.resp.bits.result(i).peek().litValue
+    dut.clock.step()
+    (outMask, out)
   }
 
   private def fp32BitsToFloat(bits: BigInt): Float =
@@ -186,6 +230,64 @@ abstract class FPEXSpecBase extends AnyFlatSpec with ChiselScalatestTester {
     case _ => 400
   }
 
+  private def nonTrivialLaneMasks(lanes: Int): Seq[Int] = {
+    val all = (1 << lanes) - 1
+    (1 until all).toSeq
+  }
+
+
+  it should "keep response invalid until the first pipelined result is due after reset" in {
+    test(new FPEX(FPType.FP32T, numLanes = 1)) { dut =>
+      val lanes = 1
+      val expectedLatency = 5
+      initializeInterface(dut, lanes, drainCycles = 0)
+
+      for (i <- 0 until 2) {
+        assert(!dut.io.resp.valid.peek().litToBoolean, s"resp.valid should be low while idle (cycle $i)")
+        dut.clock.step()
+      }
+
+      val inputs = Seq(0x3f800000L, 0xbf800000L, 0x40000000L)
+      val expected = inputs.map { inBits =>
+        val quantIn = fp32BitsToFloat(inBits).toDouble
+        fp32FloatToBits(math.exp(quantIn).toFloat)
+      }
+
+      dut.io.resp.ready.poke(true.B)
+      dut.io.req.bits.neg.poke(false.B)
+      dut.io.req.bits.roundingMode.poke(0.U)
+      dut.io.req.bits.tag.poke(0.U)
+      dut.io.req.bits.laneMask.poke(1.U)
+
+      dut.io.req.valid.poke(true.B)
+      dut.io.req.bits.xVec(0).poke(inputs.head.U)
+      assert(dut.io.req.ready.peek().litToBoolean, "req.ready should be high for the first request")
+      dut.clock.step()
+
+      for (fill <- 0 until (expectedLatency - 1)) {
+        if (fill + 1 < inputs.length) {
+          dut.io.req.valid.poke(true.B)
+          dut.io.req.bits.xVec(0).poke(inputs(fill + 1).U)
+          assert(dut.io.req.ready.peek().litToBoolean, s"req.ready dropped during fill cycle $fill")
+        } else {
+          dut.io.req.valid.poke(false.B)
+        }
+        assert(!dut.io.resp.valid.peek().litToBoolean, s"resp.valid asserted too early at fill cycle $fill")
+        dut.clock.step()
+      }
+      dut.io.req.valid.poke(false.B)
+
+      expected.zipWithIndex.foreach { case (expBits, i) =>
+        assert(dut.io.resp.valid.peek().litToBoolean, s"missing response $i when expected")
+        val gotBits = dut.io.resp.bits.result(0).peek().litValue.toLong & 0xffffffffL
+        val diff = ulpDiff32(gotBits, expBits)
+        assert(diff <= 6, s"response $i mismatch: got=0x${hex(gotBits)} expected=0x${hex(expBits)} diff=$diff")
+        dut.clock.step()
+      }
+
+      assert(!dut.io.resp.valid.peek().litToBoolean, "resp.valid remained high after draining all queued responses")
+    }
+  }
 
   it should "handle special cases (FP32)" in {
     test(new FPEX(FPType.FP32T, numLanes = 4)) { dut =>
@@ -615,6 +717,210 @@ abstract class FPEXSpecBase extends AnyFlatSpec with ChiselScalatestTester {
         val out = driveAndAwaitVec(dut, inVec, neg = neg)
         out.zipWithIndex.foreach { case (v, i) =>
           laneChecks(i)(v.toLong & 0xffffL)
+        }
+      }
+    }
+  }
+
+  it should "handle partial lane masks under random mixed inputs (FP32)" in {
+    test(new FPEX(FPType.FP32T, numLanes = 4)) { dut =>
+      val lanes = 4
+      initializeInterface(dut, lanes)
+      val rng = new Random(104)
+      val masks = nonTrivialLaneMasks(lanes)
+      val nan = 0x7fc00000L
+      val posInf = 0x7f800000L
+      val negInf = 0xff800000L
+      val posZero = 0x00000000L
+      val subnormal = 0x00000001L
+      val posOverflow = 0x42b17219L
+      val negOverflow = 0xc2b17219L
+      val one = 0x3f800000L
+      val zero = 0x00000000L
+
+      for (_ <- 0 until mixedRequestsPerProfile) {
+        val neg = rng.nextBoolean()
+        val laneMask = masks(rng.nextInt(masks.size))
+        val laneChecks = Array.fill[Option[Long => Unit]](lanes)(None)
+        val inVec = (0 until lanes).map { lane =>
+          val active = ((laneMask >> lane) & 1) == 1
+          if (rng.nextDouble() < 0.5) {
+            rng.nextInt(6) match {
+              case 0 =>
+                if (active) laneChecks(lane) = Some((out: Long) => assert(isNaN(out, 8, 23), s"expected NaN, got 0x${hex(out)}"))
+                nan
+              case 1 =>
+                val expected = if (neg) zero else posInf
+                if (active) laneChecks(lane) = Some((out: Long) => assert(out == expected, s"expected 0x${hex(expected)}, got 0x${hex(out)}"))
+                posInf
+              case 2 =>
+                val expected = if (neg) posInf else zero
+                if (active) laneChecks(lane) = Some((out: Long) => assert(out == expected, s"expected 0x${hex(expected)}, got 0x${hex(out)}"))
+                negInf
+              case 3 =>
+                if (active) laneChecks(lane) = Some((out: Long) => assert(out == one, s"expected 1.0, got 0x${hex(out)}"))
+                posZero
+              case 4 =>
+                if (active) laneChecks(lane) = Some((out: Long) => assert(out == one, s"expected 1.0, got 0x${hex(out)}"))
+                subnormal
+              case _ =>
+                if (active) laneChecks(lane) = Some((out: Long) => assert(out == posInf, s"expected +Inf, got 0x${hex(out)}"))
+                if (neg) negOverflow else posOverflow
+            }
+          } else {
+            val in = (rng.nextDouble() * 12.0 - 6.0).toFloat
+            val inBits = fp32FloatToBits(in)
+            if (active) {
+              val quantIn = fp32BitsToFloat(inBits).toDouble
+              val expectedBits = fp32FloatToBits(math.exp(if (neg) -quantIn else quantIn).toFloat)
+              laneChecks(lane) = Some((out: Long) => {
+                val diff = ulpDiff32(out, expectedBits)
+                assert(diff <= 6, s"normal-lane FP32 ULP diff $diff > 6 for input $in (neg=$neg, laneMask=0x${hex(laneMask)})")
+              })
+            }
+            inBits
+          }
+        }
+        val (outMask, out) = driveAndAwaitVecMasked(dut, inVec, laneMask, neg = neg)
+        assert((outMask.toInt & ((1 << lanes) - 1)) == laneMask, s"laneMask mismatch: got=0x${outMask.toString(16)} exp=0x${hex(laneMask)}")
+        out.zipWithIndex.foreach { case (v, lane) =>
+          laneChecks(lane).foreach(check => check(v.toLong & 0xffffffffL))
+        }
+      }
+    }
+  }
+
+  it should "handle partial lane masks under random mixed inputs (FP16)" in {
+    test(new FPEX(FPType.FP16T, numLanes = 4)) { dut =>
+      val lanes = 4
+      initializeInterface(dut, lanes)
+      val rng = new Random(105)
+      val masks = nonTrivialLaneMasks(lanes)
+      val nan = 0x7e00L
+      val posInf = 0x7c00L
+      val negInf = 0xfc00L
+      val posZero = 0x0000L
+      val subnormal = 0x0001L
+      val posOverflow = 0x498dL
+      val negOverflow = 0xc98dL
+      val one = 0x3c00L
+      val zero = 0x0000L
+
+      for (_ <- 0 until mixedRequestsPerProfile) {
+        val neg = rng.nextBoolean()
+        val laneMask = masks(rng.nextInt(masks.size))
+        val laneChecks = Array.fill[Option[Long => Unit]](lanes)(None)
+        val inVec = (0 until lanes).map { lane =>
+          val active = ((laneMask >> lane) & 1) == 1
+          if (rng.nextDouble() < 0.5) {
+            rng.nextInt(6) match {
+              case 0 =>
+                if (active) laneChecks(lane) = Some((out: Long) => assert(isNaN(out, 5, 10), s"expected NaN, got 0x${hex(out)}"))
+                nan
+              case 1 =>
+                val expected = if (neg) zero else posInf
+                if (active) laneChecks(lane) = Some((out: Long) => assert(out == expected, s"expected 0x${hex(expected)}, got 0x${hex(out)}"))
+                posInf
+              case 2 =>
+                val expected = if (neg) posInf else zero
+                if (active) laneChecks(lane) = Some((out: Long) => assert(out == expected, s"expected 0x${hex(expected)}, got 0x${hex(out)}"))
+                negInf
+              case 3 =>
+                if (active) laneChecks(lane) = Some((out: Long) => assert(out == one, s"expected 1.0, got 0x${hex(out)}"))
+                posZero
+              case 4 =>
+                if (active) laneChecks(lane) = Some((out: Long) => assert(out == one, s"expected 1.0, got 0x${hex(out)}"))
+                subnormal
+              case _ =>
+                if (active) laneChecks(lane) = Some((out: Long) => assert(out == posInf, s"expected +Inf, got 0x${hex(out)}"))
+                if (neg) negOverflow else posOverflow
+            }
+          } else {
+            val in = (rng.nextDouble() * 10.0 - 5.0).toFloat
+            val inBits = floatToFp16Bits(in)
+            if (active) {
+              val quantIn = fp16BitsToFloat(inBits).toDouble
+              val expectedBits = floatToFp16Bits(math.exp(if (neg) -quantIn else quantIn).toFloat)
+              laneChecks(lane) = Some((out: Long) => {
+                val diff = ulpDiff16(out, expectedBits)
+                assert(diff <= 2, s"normal-lane FP16 ULP diff $diff > 2 for input $in (neg=$neg, laneMask=0x${hex(laneMask)})")
+              })
+            }
+            inBits
+          }
+        }
+        val (outMask, out) = driveAndAwaitVecMasked(dut, inVec, laneMask, neg = neg)
+        assert((outMask.toInt & ((1 << lanes) - 1)) == laneMask, s"laneMask mismatch: got=0x${outMask.toString(16)} exp=0x${hex(laneMask)}")
+        out.zipWithIndex.foreach { case (v, lane) =>
+          laneChecks(lane).foreach(check => check(v.toLong & 0xffffL))
+        }
+      }
+    }
+  }
+
+  it should "handle partial lane masks under random mixed inputs (BF16)" in {
+    test(new FPEX(FPType.BF16T, numLanes = 4)) { dut =>
+      val lanes = 4
+      initializeInterface(dut, lanes)
+      val rng = new Random(106)
+      val masks = nonTrivialLaneMasks(lanes)
+      val nan = 0x7fc0L
+      val posInf = 0x7f80L
+      val negInf = 0xff80L
+      val posZero = 0x0000L
+      val subnormal = 0x0001L
+      val posOverflow = 0x42b2L
+      val negOverflow = 0xc2b2L
+      val one = 0x3f80L
+      val zero = 0x0000L
+
+      for (_ <- 0 until mixedRequestsPerProfile) {
+        val neg = rng.nextBoolean()
+        val laneMask = masks(rng.nextInt(masks.size))
+        val laneChecks = Array.fill[Option[Long => Unit]](lanes)(None)
+        val inVec = (0 until lanes).map { lane =>
+          val active = ((laneMask >> lane) & 1) == 1
+          if (rng.nextDouble() < 0.5) {
+            rng.nextInt(6) match {
+              case 0 =>
+                if (active) laneChecks(lane) = Some((out: Long) => assert(isNaN(out, 8, 7), s"expected NaN, got 0x${hex(out)}"))
+                nan
+              case 1 =>
+                val expected = if (neg) zero else posInf
+                if (active) laneChecks(lane) = Some((out: Long) => assert(out == expected, s"expected 0x${hex(expected)}, got 0x${hex(out)}"))
+                posInf
+              case 2 =>
+                val expected = if (neg) posInf else zero
+                if (active) laneChecks(lane) = Some((out: Long) => assert(out == expected, s"expected 0x${hex(expected)}, got 0x${hex(out)}"))
+                negInf
+              case 3 =>
+                if (active) laneChecks(lane) = Some((out: Long) => assert(out == one, s"expected 1.0, got 0x${hex(out)}"))
+                posZero
+              case 4 =>
+                if (active) laneChecks(lane) = Some((out: Long) => assert(out == one, s"expected 1.0, got 0x${hex(out)}"))
+                subnormal
+              case _ =>
+                if (active) laneChecks(lane) = Some((out: Long) => assert(out == posInf, s"expected +Inf, got 0x${hex(out)}"))
+                if (neg) negOverflow else posOverflow
+            }
+          } else {
+            val in = (rng.nextDouble() * 12.0 - 6.0).toFloat
+            val inBits = floatToBf16Bits(in)
+            if (active) {
+              val quantIn = bf16BitsToFloat(inBits).toDouble
+              val expectedBits = floatToBf16Bits(math.exp(if (neg) -quantIn else quantIn).toFloat)
+              laneChecks(lane) = Some((out: Long) => {
+                val diff = ulpDiff16(out, expectedBits)
+                assert(diff <= 2, s"normal-lane BF16 ULP diff $diff > 2 for input $in (neg=$neg, laneMask=0x${hex(laneMask)})")
+              })
+            }
+            inBits
+          }
+        }
+        val (outMask, out) = driveAndAwaitVecMasked(dut, inVec, laneMask, neg = neg)
+        assert((outMask.toInt & ((1 << lanes) - 1)) == laneMask, s"laneMask mismatch: got=0x${outMask.toString(16)} exp=0x${hex(laneMask)}")
+        out.zipWithIndex.foreach { case (v, lane) =>
+          laneChecks(lane).foreach(check => check(v.toLong & 0xffffL))
         }
       }
     }
