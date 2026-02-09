@@ -79,7 +79,7 @@ class FPEX(fpT: FPType, numLanes: Int = 4, tagWidth: Int = 1)
   }
 
   def numIntermediateStages = 5
-  val commonState = Reg(Vec(numIntermediateStages, new CommonStageState))
+  val commonState = RegInit(VecInit(Seq.fill(numIntermediateStages)(0.U.asTypeOf(new CommonStageState))))
   val backPressure = Wire(Vec(numIntermediateStages, Bool()))
   val stateWithBp = commonState.zip(backPressure)
   def st(i: Int) = commonState(i-1)
