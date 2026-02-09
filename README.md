@@ -1,5 +1,5 @@
 # Description
-Vector FP32/FP16/BF16 exponentiation module written in Chisel. Fully pipelined. 4 cycle latency end to end
+Vector FP32/FP16/BF16 exponentiation module written in Chisel. Fully pipelined. 6 cycle latency end to end
 Just copy-paste fpex/ and hardfloat/ into your project to reuse
 
 ## Commands
