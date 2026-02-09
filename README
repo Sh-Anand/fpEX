@@ -1,7 +1,22 @@
-Vector fp exponentiation module in chisel
+# Description
+Vector FP32/FP16/BF16 exponentiation module written in Chisel. Fully pipelined. 6 cycle latency end to end
+Just copy-paste fpex/ and hardfloat/ into your project to reuse
 
-`./mill compile` compiles
-`./mill run` generates verilog in generated/*.v
-`./mill test.testOnly fpex.FPEX{SIZE}Spec` where SIZE = {Short, Medium, Large} runs the test bench
-example: ./mill test.testOnly fpex.FPEXShortSpec
-`./mill clean` to clean stale configs if you change anything
+## Commands
+- `./mill compile`
+- `./mill run` (generates Verilog in `generated/*.v`)
+- `./mill clean`
+
+## Test Targets
+- `./mill test.testOnly fpex.FPEXShortSpec` : Runs all FP32+FP16+BF16
+- `./mill test.testOnly fpex.FPEXMediumSpec`
+- `./mill test.testOnly fpex.FPEXLongSpec`
+- `./mill test.testOnly fpex.FPEXShortSpecFP32`
+- `./mill test.testOnly fpex.FPEXShortSpecFP16`
+- `./mill test.testOnly fpex.FPEXShortSpecBF16`
+- `./mill test.testOnly fpex.FPEXMediumSpecFP32`
+- `./mill test.testOnly fpex.FPEXMediumSpecFP16`
+- `./mill test.testOnly fpex.FPEXMediumSpecBF16`
+- `./mill test.testOnly fpex.FPEXLongSpecFP32`
+- `./mill test.testOnly fpex.FPEXLongSpecFP16`
+- `./mill test.testOnly fpex.FPEXLongSpecBF16`
