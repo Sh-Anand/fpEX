@@ -166,28 +166,78 @@ abstract class FPEXSpecBase extends AnyFlatSpec with ChiselScalatestTester {
     val sign = (h >>> 15) & 0x1
     val exp = (h >>> 10) & 0x1f
     val frac = h & 0x3ff
-    val fexp =
-      if (exp == 0) 0
-      else if (exp == 0x1f) 0xff
-      else exp - 15 + 127
-    val ffrac =
-      if (exp == 0 || exp == 0x1f) frac << 13
-      else frac << 13
-    val fbits = (sign << 31) | (fexp << 23) | ffrac
+    val fbits =
+      if (exp == 0) {
+        if (frac == 0) {
+          sign << 31
+        } else {
+          var mant = frac
+          var e = -14
+          while ((mant & 0x400) == 0) {
+            mant <<= 1
+            e -= 1
+          }
+          mant &= 0x3ff
+          val fexp = e + 127
+          val ffrac = mant << 13
+          (sign << 31) | (fexp << 23) | ffrac
+        }
+      } else if (exp == 0x1f) {
+        val fexp = 0xff
+        val ffrac = frac << 13
+        (sign << 31) | (fexp << 23) | ffrac
+      } else {
+        val fexp = exp - 15 + 127
+        val ffrac = frac << 13
+        (sign << 31) | (fexp << 23) | ffrac
+      }
     java.lang.Float.intBitsToFloat(fbits)
   }
 
   private def floatToFp16Bits(f: Float): Long = {
     val bits = java.lang.Float.floatToIntBits(f)
-    val sign = (bits >>> 31) & 0x1
+    val sign = (bits >>> 16) & 0x8000
     val exp = (bits >>> 23) & 0xff
     val frac = bits & 0x7fffff
-    val hexp =
-      if (exp == 0) 0
-      else if (exp == 0xff) 0x1f
-      else exp - 127 + 15
-    val hfrac = frac >>> 13
-    ((sign << 15) | ((hexp & 0x1f) << 10) | (hfrac & 0x3ff)).toLong
+    val out =
+      if (exp == 0xff) {
+        if (frac == 0) sign | 0x7c00
+        else sign | 0x7e00
+      } else {
+        val unbiased = exp - 127
+        var hexp = unbiased + 15
+        if (hexp >= 0x1f) {
+          sign | 0x7c00
+        } else if (hexp <= 0) {
+          if (hexp < -10) {
+            sign
+          } else {
+            val mant = frac | 0x800000
+            val shift = 14 - hexp
+            var hfrac = mant >>> shift
+            val remMask = (1 << shift) - 1
+            val rem = mant & remMask
+            val halfway = 1 << (shift - 1)
+            if (rem > halfway || (rem == halfway && (hfrac & 1) == 1)) {
+              hfrac += 1
+            }
+            sign | (hfrac & 0x3ff)
+          }
+        } else {
+          var hfrac = frac >>> 13
+          val rem = frac & 0x1fff
+          if (rem > 0x1000 || (rem == 0x1000 && (hfrac & 1) == 1)) {
+            hfrac += 1
+            if (hfrac == 0x400) {
+              hfrac = 0
+              hexp += 1
+            }
+          }
+          if (hexp >= 0x1f) sign | 0x7c00
+          else sign | ((hexp & 0x1f) << 10) | (hfrac & 0x3ff)
+        }
+      }
+    out.toLong
   }
 
   private def ulpDiff16(aBits: Long, bBits: Long): Long = {
