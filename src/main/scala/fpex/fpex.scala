@@ -37,6 +37,11 @@ class FPEX(fpT: FPType, numLanes: Int = 4, tagWidth: Int = 1)
     val resp = Decoupled(new FPEXResp(fpT.wordWidth, numLanes, tagWidth))
   })
 
+  def maskLane[T <: Data](bitsVec: Vec[T], laneMask: UInt): Vec[T] = {
+    require(laneMask.getWidth == bitsVec.length)
+    VecInit(bitsVec.zip(laneMask.asBools).map{case (bits, laneEnable) => RegEnable(bits, laneEnable)})
+  }
+
   val state = RegInit(FPEXState.READY)
   val res = Reg(Vec(numLanes, UInt(fpT.wordWidth.W)))
   val lut = Module(new ExLUT(numLanes, fpT.lutAddrBits, fpT.lutValM, fpT.lutValN))
