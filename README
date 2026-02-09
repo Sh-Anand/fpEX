@@ -11,6 +11,7 @@ Just copy-paste fpex/ and hardfloat/ into your project to reuse
 - `./mill test.testOnly fpex.FPEXShortSpec` : Runs all FP32+FP16+BF16
 - `./mill test.testOnly fpex.FPEXMediumSpec`
 - `./mill test.testOnly fpex.FPEXLongSpec`
+- `./mill test.testOnly fpex.FPEXWideSpec`
 - `./mill test.testOnly fpex.FPEXShortSpecFP32`
 - `./mill test.testOnly fpex.FPEXShortSpecFP16`
 - `./mill test.testOnly fpex.FPEXShortSpecBF16`
@@ -20,3 +21,6 @@ Just copy-paste fpex/ and hardfloat/ into your project to reuse
 - `./mill test.testOnly fpex.FPEXLongSpecFP32`
 - `./mill test.testOnly fpex.FPEXLongSpecFP16`
 - `./mill test.testOnly fpex.FPEXLongSpecBF16`
+- `./mill test.testOnly fpex.FPEXWideSpecFP32`
+- `./mill test.testOnly fpex.FPEXWideSpecFP16`
+- `./mill test.testOnly fpex.FPEXWideSpecBF16`

@@ -230,8 +230,18 @@ abstract class FPEXSpecBase extends AnyFlatSpec with ChiselScalatestTester {
   private def mixedRequestsPerProfile: Int = profileName match {
     case "short" => 50
     case "medium" => 100
+    case "wide" => 4000
     case _ => 400
   }
+
+  private def fp32NormalAbsRange: Float =
+    if (profileName == "wide") 88.72283f - 0.01f else 6.0f
+
+  private def fp16NormalAbsRange: Float =
+    if (profileName == "wide") 11.089866f - 0.01f else 5.0f
+
+  private def bf16NormalAbsRange: Float =
+    if (profileName == "wide") 88.72283f - 0.01f else 6.0f
 
   private def nonTrivialLaneMasks(lanes: Int): Seq[Int] = {
     val all = (1 << lanes) - 1
@@ -353,7 +363,8 @@ abstract class FPEXSpecBase extends AnyFlatSpec with ChiselScalatestTester {
             if (neg) negOverflow else posOverflow
         }
       } else {
-        val in = (rng.nextDouble() * 12.0 - 6.0).toFloat
+        val absRange = fp32NormalAbsRange
+        val in = (rng.nextDouble() * (2.0 * absRange) - absRange).toFloat
         val inBits = fp32FloatToBits(in)
         val quantIn = fp32BitsToFloat(inBits).toDouble
         val expectedBits = fp32FloatToBits(math.exp(if (neg) -quantIn else quantIn).toFloat)
@@ -403,7 +414,8 @@ abstract class FPEXSpecBase extends AnyFlatSpec with ChiselScalatestTester {
             if (neg) negOverflow else posOverflow
         }
       } else {
-        val in = (rng.nextDouble() * 10.0 - 5.0).toFloat
+        val absRange = fp16NormalAbsRange
+        val in = (rng.nextDouble() * (2.0 * absRange) - absRange).toFloat
         val inBits = floatToFp16Bits(in)
         val quantIn = fp16BitsToFloat(inBits).toDouble
         val expectedBits = floatToFp16Bits(math.exp(if (neg) -quantIn else quantIn).toFloat)
@@ -453,7 +465,8 @@ abstract class FPEXSpecBase extends AnyFlatSpec with ChiselScalatestTester {
             if (neg) negOverflow else posOverflow
         }
       } else {
-        val in = (rng.nextDouble() * 12.0 - 6.0).toFloat
+        val absRange = bf16NormalAbsRange
+        val in = (rng.nextDouble() * (2.0 * absRange) - absRange).toFloat
         val inBits = floatToBf16Bits(in)
         val quantIn = bf16BitsToFloat(inBits).toDouble
         val expectedBits = floatToBf16Bits(math.exp(if (neg) -quantIn else quantIn).toFloat)
@@ -1149,6 +1162,13 @@ class FPEXLongSpec extends FPEXSpecBase {
   override protected def approxLanes: Int = 1
 }
 
+class FPEXWideSpec extends FPEXSpecBase {
+  override protected def profileName: String = "wide"
+  override protected def randomCount: Int = 4000
+  override protected def gridCount: Int = 651
+  override protected def approxLanes: Int = 1
+}
+
 class FPEXLongSpecFP32 extends FPEXLongSpec {
   override protected def enableFP16Tests: Boolean = false
   override protected def enableBF16Tests: Boolean = false
@@ -1160,6 +1180,21 @@ class FPEXLongSpecFP16 extends FPEXLongSpec {
 }
 
 class FPEXLongSpecBF16 extends FPEXLongSpec {
+  override protected def enableFP32Tests: Boolean = false
+  override protected def enableFP16Tests: Boolean = false
+}
+
+class FPEXWideSpecFP32 extends FPEXWideSpec {
+  override protected def enableFP16Tests: Boolean = false
+  override protected def enableBF16Tests: Boolean = false
+}
+
+class FPEXWideSpecFP16 extends FPEXWideSpec {
+  override protected def enableFP32Tests: Boolean = false
+  override protected def enableBF16Tests: Boolean = false
+}
+
+class FPEXWideSpecBF16 extends FPEXWideSpec {
   override protected def enableFP32Tests: Boolean = false
   override protected def enableFP16Tests: Boolean = false
 }
