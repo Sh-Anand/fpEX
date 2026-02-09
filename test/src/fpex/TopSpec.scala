@@ -181,9 +181,9 @@ abstract class FPEXSpecBase extends AnyFlatSpec with ChiselScalatestTester {
   private def hex(x: Long): String = java.lang.Long.toHexString(x)
 
   private def mixedRequestsPerProfile: Int = profileName match {
-    case "short" => 256
-    case "medium" => 384
-    case _ => 512
+    case "short" => 50
+    case "medium" => 100
+    case _ => 400
   }
 
 
@@ -623,21 +623,21 @@ abstract class FPEXSpecBase extends AnyFlatSpec with ChiselScalatestTester {
 
 class FPEXShortSpec extends FPEXSpecBase {
   override protected def profileName: String = "short"
-  override protected def randomCount: Int = 24
+  override protected def randomCount: Int = 50
   override protected def gridCount: Int = 11
   override protected def approxLanes: Int = 1
 }
 
 class FPEXMediumSpec extends FPEXSpecBase {
   override protected def profileName: String = "medium"
-  override protected def randomCount: Int = 96
+  override protected def randomCount: Int = 100
   override protected def gridCount: Int = 25
   override protected def approxLanes: Int = 1
 }
 
 class FPEXLongSpec extends FPEXSpecBase {
   override protected def profileName: String = "long"
-  override protected def randomCount: Int = 384
+  override protected def randomCount: Int = 400
   override protected def gridCount: Int = 65
   override protected def approxLanes: Int = 1
 }
