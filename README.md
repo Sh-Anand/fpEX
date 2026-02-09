@@ -8,6 +8,7 @@ Just copy-paste fpex/ and hardfloat/ into your project to reuse
 - `./mill clean`
 
 ## Test Targets
+- ./mill test : Runs everything
 - `./mill test.testOnly fpex.FPEXShortSpec` : Runs all FP32+FP16+BF16
 - `./mill test.testOnly fpex.FPEXMediumSpec`
 - `./mill test.testOnly fpex.FPEXLongSpec`
