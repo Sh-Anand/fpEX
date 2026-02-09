@@ -7,6 +7,15 @@ import hardfloat._
 trait HasFPEXParams {
   def numFP16Lanes = 4
   def tagWidth = 8
+
+  def maskLane[T <: Data](currVec: Vec[T], nxtVec: Vec[T], laneMask: Vec[Bool]): Vec[T] = {
+    require(laneMask.length == currVec.length && currVec.length == nxtVec.length)
+    VecInit(currVec.zip(nxtVec).zip(laneMask).map{case ((curr, nxt), en) => Mux(en, nxt, curr)})
+  }
+  def maskLaneNext[T <: Data](bitsVec: Vec[T], laneMask: Vec[Bool]): Vec[T] = {
+    require(laneMask.length == bitsVec.length)
+    VecInit(bitsVec.zip(laneMask).map{case (bits, laneEnable) => RegEnable(bits, laneEnable)})
+  }
 }
 
 object FPEXState extends ChiselEnum {
@@ -36,15 +45,6 @@ class FPEX(fpT: FPType, numLanes: Int = 4, tagWidth: Int = 1)
     val req = Flipped(Decoupled(new FPEXReq(fpT.wordWidth, numLanes, tagWidth)))
     val resp = Decoupled(new FPEXResp(fpT.wordWidth, numLanes, tagWidth))
   })
-
-  def maskLane[T <: Data](currVec: Vec[T], nxtVec: Vec[T], laneMask: Vec[Bool]): Vec[T] = {
-    require(laneMask.length == currVec.length && currVec.length == nxtVec.length)
-    VecInit(currVec.zip(nxtVec).zip(laneMask).map{case ((curr, nxt), en) => Mux(en, nxt, curr)})
-  }
-  def maskLaneNext[T <: Data](bitsVec: Vec[T], laneMask: Vec[Bool]): Vec[T] = {
-    require(laneMask.length == bitsVec.length)
-    VecInit(bitsVec.zip(laneMask).map{case (bits, laneEnable) => RegEnable(bits, laneEnable)})
-  }
 
   val state = RegInit(FPEXState.READY)
   val res = Reg(Vec(numLanes, UInt(fpT.wordWidth.W)))
