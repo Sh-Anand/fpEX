@@ -25,3 +25,5 @@ Just copy-paste fpex/ and hardfloat/ into your project to reuse
 - `./mill test.testOnly fpex.FPEXWideSpecFP32`
 - `./mill test.testOnly fpex.FPEXWideSpecFP16`
 - `./mill test.testOnly fpex.FPEXWideSpecBF16`
+
+NOTE: fp32 tests fail for extreme inputs, fp32 accuracy is not great. Up the LUT bits if you need it.
