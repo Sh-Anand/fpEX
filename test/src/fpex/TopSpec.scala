@@ -472,7 +472,7 @@ abstract class FPEXSpecBase extends AnyFlatSpec with ChiselScalatestTester {
     it should "keep response invalid until the first pipelined result is due after reset" in {
       test(new FPEX(FPType.FP32T, numLanes = 1)) { dut =>
       val lanes = 1
-      val expectedLatency = 6
+      val expectedLatency = 4
       initializeInterface(dut, lanes, drainCycles = 0)
 
       for (i <- 0 until 2) {
