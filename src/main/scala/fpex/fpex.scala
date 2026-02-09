@@ -37,9 +37,9 @@ class FPEX(fpT: FPType, numLanes: Int = 4, tagWidth: Int = 1)
     val resp = Decoupled(new FPEXResp(fpT.wordWidth, numLanes, tagWidth))
   })
 
-  def maskLane[T <: Data](bitsVec: Vec[T], laneMask: UInt): Vec[T] = {
-    require(laneMask.getWidth == bitsVec.length)
-    VecInit(bitsVec.zip(laneMask.asBools).map{case (bits, laneEnable) => RegEnable(bits, laneEnable)})
+  def maskLaneNext[T <: Data](bitsVec: Vec[T], laneMask: Vec[Bool]): Vec[T] = {
+    require(laneMask.length == bitsVec.length)
+    VecInit(bitsVec.zip(laneMask).map{case (bits, laneEnable) => RegEnable(bits, laneEnable)})
   }
 
   val state = RegInit(FPEXState.READY)
@@ -48,12 +48,17 @@ class FPEX(fpT: FPType, numLanes: Int = 4, tagWidth: Int = 1)
   val roundToRecFn = Seq.fill(numLanes)(Module(new RoundRawFNToRecFN(fpT.expWidth, fpT.sigWidth, 0)))
   val busy = state === FPEXState.BUSY
 
+  val laneEnable = VecInit((io.req.bits.laneMask & VecInit.fill(numLanes)(io.req.fire).asUInt).asBools)
+  val maskedXVec = io.req.bits.xVec.zip(laneEnable).map {
+    case (x, en) => Mux (en, x, 0.U(fpT.wordWidth.W))
+  }
+  val maskedNeg = io.req.bits.neg && io.req.fire
+
   //stage 0: special case check and raw float decomposition
   //flush subnormals to zero, ignore x for which e^x = inf
-  val laneEnable = io.req.bits.laneMask & VecInit.fill(numLanes)(io.req.fire).asUInt
-  val rawFloatVec = VecInit(io.req.bits.xVec.map(
-    x => rawFloatFromFN(fpT.expWidth, fpT.sigWidth, x).negate(io.req.bits.neg)))
-  val expFPOverflow = VecInit(io.req.bits.xVec.map(x => fpT.expFPIsInf(x, io.req.bits.neg)))
+  val rawFloatVec = VecInit(maskedXVec.map(
+    x => rawFloatFromFN(fpT.expWidth, fpT.sigWidth, x).negate(maskedNeg)))
+  val expFPOverflow = VecInit(maskedXVec.map(x => fpT.expFPIsInf(x, maskedNeg)))
   val rawFloatOf = rawFloatVec.zip(expFPOverflow)
   val earlyRes = VecInit(rawFloatOf.map { case (x, of) =>
     MuxCase(
@@ -71,42 +76,46 @@ class FPEX(fpT: FPType, numLanes: Int = 4, tagWidth: Int = 1)
   })
 
   //stage 1: convert to Qmn
-  val stage1Req = RegNext(io.req.bits)
+  val stage1Req = RegEnable(io.req.bits, io.req.fire)
   val stage1Valid = RegNext(io.req.fire)
-  val stage1EarlyTerminate = RegNext(earlyTerminate)
-  val stage1EarlyRes = RegNext(earlyRes)
-  val stage1RawFloatVec = RegEnable(rawFloatVec, io.req.fire)
+  val stage1LaneEnable = RegNext(laneEnable)
+  val stage1EarlyTerminate = maskLaneNext(earlyTerminate, laneEnable)
+  val stage1EarlyRes = maskLaneNext(earlyRes, laneEnable)
+  val stage1RawFloatVec = maskLaneNext(rawFloatVec, laneEnable)
   val stage1Qmn = VecInit(stage1RawFloatVec.map(x => fpT.qmnFromRawFloat(x)))
 
   //stage 2: multiply x/ln2, extract k and r, init lut read r[top]
-  val stage2Req = RegNext(stage1Req)
+  val stage2Req = RegEnable(stage1Req, stage1Valid)
   val stage2Valid = RegNext(stage1Valid)
-  val stage2EarlyTerminate = RegNext(stage1EarlyTerminate)
-  val stage2EarlyRes = RegNext(stage1EarlyRes)
-  val stage2Qmn = RegEnable(stage1Qmn, stage1Valid)
+  val stage2LaneEnable = RegNext(stage1LaneEnable)
+  val stage2EarlyTerminate = maskLaneNext(stage1EarlyTerminate, stage1LaneEnable)
+  val stage2EarlyRes = maskLaneNext(stage1EarlyRes, stage1LaneEnable)
+  val stage2Qmn = maskLaneNext(stage1Qmn, stage1LaneEnable)
   val xrln2KRVec = stage2Qmn.map(_.mul(fpT.rln2).getKR).unzip
   val stage2kVec = VecInit(xrln2KRVec._1)
   val stage2rVec = VecInit(xrln2KRVec._2)
 
   //stage 3: lut ready r[top], init lut read r[top] + 1
-  val stage3Req = RegNext(stage2Req)
+  val stage3Req = RegEnable(stage2Req, stage2Valid)
   val rLowBits = fpT.qmnN - fpT.lutAddrBits
   val stage3Valid = RegNext(stage2Valid)
-  val stage3EarlyTerminate = RegNext(stage2EarlyTerminate)
-  val stage3EarlyRes = RegNext(stage2EarlyRes)
-  val stage3kVec = RegNext(stage2kVec)
-  val stage3rVec = RegNext(stage2rVec)
+  val stage3LaneEnable = RegNext(stage2LaneEnable)
+  val stage3EarlyTerminate = maskLaneNext(stage2EarlyTerminate, stage2LaneEnable)
+  val stage3EarlyRes = maskLaneNext(stage2EarlyRes, stage2LaneEnable)
+  val stage3kVec = maskLaneNext(stage2kVec, stage2LaneEnable)
+  val stage3rVec = maskLaneNext(stage2rVec, stage2LaneEnable)
   val stage3AddrVec = VecInit(stage3rVec.map(r => r(fpT.qmnN - 1, rLowBits)))
   val rLowerVec = VecInit(stage3rVec.map(r => r(rLowBits - 1, 0)))
 
   //stage 4: lut ready r[top] + 1, interpolate
-  val stage4Req = RegNext(stage3Req)
+  val stage4Req = RegEnable(stage3Req, stage3Valid)
   val stage4Valid = RegNext(stage3Valid)
-  val stage4EarlyTerminate = RegNext(stage3EarlyTerminate)
-  val stage4EarlyRes = RegNext(stage3EarlyRes)
-  val stage4kVec = RegNext(stage3kVec)
-  val stage4rLowerVec = RegNext(rLowerVec)
-  val stage4AddrVec = RegNext(stage3AddrVec)
+  val stage4LaneEnable = RegNext(stage3LaneEnable)
+  val stage4EarlyTerminate = maskLaneNext(stage3EarlyTerminate, stage3LaneEnable)
+  val stage4EarlyRes = maskLaneNext(stage3EarlyRes, stage3LaneEnable)
+  val stage4kVec = maskLaneNext(stage3kVec, stage3LaneEnable)
+  val stage4rLowerVec = maskLaneNext(rLowerVec, stage3LaneEnable)
+  val stage4AddrVec = maskLaneNext(stage3AddrVec, stage3LaneEnable)
   val y0 = RegNext(lut.io.rdata(0))
   val y1 = lut.io.rdata(1)
   val lutTopEndpoint = ((BigInt(1) << (fpT.lutValM + fpT.lutValN)) - 1).U((fpT.lutValM + fpT.lutValN).W)
@@ -119,28 +128,32 @@ class FPEX(fpT: FPType, numLanes: Int = 4, tagWidth: Int = 1)
   })
 
   //stage 5: convert and return result
-  val stage5Req = RegNext(stage4Req)
+  val stage5Req = RegEnable(stage4Req, stage4Valid)
   val stage5Valid = RegNext(stage4Valid)
-  val stage5EarlyTerminate = RegNext(stage4EarlyTerminate)
-  val stage5EarlyRes = RegNext(stage4EarlyRes)
-  val stage5pow2rVec = RegNext(pow2r)
-  val stage5kVec = RegNext(stage4kVec)
+  val stage5LaneEnable = RegNext(stage4LaneEnable)
+  val stage5EarlyTerminate = maskLaneNext(stage4EarlyTerminate, stage4LaneEnable)
+  val stage5EarlyRes = maskLaneNext(stage4EarlyRes, stage4LaneEnable)
+  val stage5pow2rVec = maskLaneNext(pow2r, stage4LaneEnable)
+  val stage5kVec = maskLaneNext(stage4kVec, stage4LaneEnable)
   val resRawFloat = stage5pow2rVec.zip(stage5kVec).map{ case (qmn, k) => fpT.rawFloatFromQmnK(qmn, k) }
-  roundToRecFn.zip(resRawFloat).foreach {
-    case (round, rawFloat) => {
+  roundToRecFn.zip(resRawFloat).zip(stage5LaneEnable).foreach {
+    case ((round, rawFloat), en) => {
       round.io.invalidExc := false.B
       round.io.infiniteExc := false.B
       round.io.in := rawFloat
-      round.io.roundingMode := stage5Req.roundingMode
+      round.io.roundingMode := Mux(en, stage5Req.roundingMode, 0.U)
       round.io.detectTininess := 0.U
     }
   }
   val resReq = RegNext(stage5Req)
   val resFN = roundToRecFn.map(round => fNFromRecFN(fpT.expWidth, fpT.sigWidth, round.io.out))
-  val resFinal = VecInit(resFN.zip(stage5EarlyTerminate.zip(stage5EarlyRes)).map { case (res, (earlyTerminate, earlyRes)) =>
-    Mux(earlyTerminate, earlyRes, res)
+  val resFinal = VecInit(resFN.zip(stage5EarlyTerminate.zip(stage5EarlyRes)).map {
+    case (res, (earlyTerminate, earlyRes)) => Mux(earlyTerminate, earlyRes, res)
   })
-  res := Mux(stage5Valid, resFinal, res)
+  val resNext = VecInit(res.zip(resFinal).zip(stage5LaneEnable).map {
+    case ((cur, nxt), en) => Mux(en && stage5Valid, nxt, cur)
+  })
+  res := resNext
 
   lut.io.raddrs(0) := stage2rVec.map(r => r(fpT.qmnN - 1, rLowBits))
   lut.io.raddrs(1) := stage3rVec.map { r =>
