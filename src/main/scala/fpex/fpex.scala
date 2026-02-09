@@ -46,7 +46,6 @@ class FPEX(fpT: FPType, numLanes: Int = 4, tagWidth: Int = 1)
   val res = Reg(Vec(numLanes, UInt(fpT.wordWidth.W)))
   val lut = Module(new ExLUT(numLanes, fpT.lutAddrBits, fpT.lutValM, fpT.lutValN))
   val roundToRecFn = Seq.fill(numLanes)(Module(new RoundRawFNToRecFN(fpT.expWidth, fpT.sigWidth, 0)))
-  val busy = state === FPEXState.BUSY
 
   val laneEnable = VecInit((io.req.bits.laneMask & VecInit.fill(numLanes)(io.req.fire).asUInt).asBools)
   val maskedXVec = io.req.bits.xVec.zip(laneEnable).map {
