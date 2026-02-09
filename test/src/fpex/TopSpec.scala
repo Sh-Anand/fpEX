@@ -12,6 +12,9 @@ abstract class FPEXSpecBase extends AnyFlatSpec with ChiselScalatestTester {
   protected def randomCount: Int
   protected def gridCount: Int
   protected def approxLanes: Int
+  protected def enableFP32Tests: Boolean = true
+  protected def enableFP16Tests: Boolean = true
+  protected def enableBF16Tests: Boolean = true
 
   private def fp32ExpAllOnes = 0x7f800000L
 
@@ -236,8 +239,9 @@ abstract class FPEXSpecBase extends AnyFlatSpec with ChiselScalatestTester {
   }
 
 
-  it should "keep response invalid until the first pipelined result is due after reset" in {
-    test(new FPEX(FPType.FP32T, numLanes = 1)) { dut =>
+  if (enableFP32Tests) {
+    it should "keep response invalid until the first pipelined result is due after reset" in {
+      test(new FPEX(FPType.FP32T, numLanes = 1)) { dut =>
       val lanes = 1
       val expectedLatency = 5
       initializeInterface(dut, lanes, drainCycles = 0)
@@ -286,11 +290,13 @@ abstract class FPEXSpecBase extends AnyFlatSpec with ChiselScalatestTester {
       }
 
       assert(!dut.io.resp.valid.peek().litToBoolean, "resp.valid remained high after draining all queued responses")
+      }
     }
   }
 
-  it should "handle special cases (FP32)" in {
-    test(new FPEX(FPType.FP32T, numLanes = 4)) { dut =>
+  if (enableFP32Tests) {
+    it should "handle special cases (FP32)" in {
+      test(new FPEX(FPType.FP32T, numLanes = 4)) { dut =>
       val lanes = 4
       initializeInterface(dut, lanes)
 
@@ -344,11 +350,13 @@ abstract class FPEXSpecBase extends AnyFlatSpec with ChiselScalatestTester {
       val negOverflowIn = 0xc2b17219L
       val negOverflowOut = driveAndAwait(dut, negOverflowIn, lanes, neg = true)
       negOverflowOut.foreach(v => assert(v == posInf, s"expected +Inf, got 0x${v.toString(16)}"))
+      }
     }
   }
 
-  it should "handle special cases (FP16)" in {
-    test(new FPEX(FPType.FP16T, numLanes = 4)) { dut =>
+  if (enableFP16Tests) {
+    it should "handle special cases (FP16)" in {
+      test(new FPEX(FPType.FP16T, numLanes = 4)) { dut =>
       val lanes = 4
       initializeInterface(dut, lanes)
 
@@ -402,11 +410,13 @@ abstract class FPEXSpecBase extends AnyFlatSpec with ChiselScalatestTester {
       val negOverflowIn = 0xc98dL
       val negOverflowOut = driveAndAwait(dut, negOverflowIn, lanes, neg = true)
       negOverflowOut.foreach(v => assert(v == posInf, s"expected +Inf, got 0x${v.toString(16)}"))
+      }
     }
   }
 
-  it should "handle special cases (BF16)" in {
-    test(new FPEX(FPType.BF16T, numLanes = 4)) { dut =>
+  if (enableBF16Tests) {
+    it should "handle special cases (BF16)" in {
+      test(new FPEX(FPType.BF16T, numLanes = 4)) { dut =>
       val lanes = 4
       initializeInterface(dut, lanes)
 
@@ -460,11 +470,13 @@ abstract class FPEXSpecBase extends AnyFlatSpec with ChiselScalatestTester {
       val negOverflowIn = 0xc2b2L
       val negOverflowOut = driveAndAwait(dut, negOverflowIn, lanes, neg = true)
       negOverflowOut.foreach(v => assert(v == posInf, s"expected +Inf, got 0x${v.toString(16)}"))
+      }
     }
   }
 
-  it should "approximate exp for normal FP32 values" in {
-    test(new FPEX(FPType.FP32T, numLanes = approxLanes)) { dut =>
+  if (enableFP32Tests) {
+    it should "approximate exp for normal FP32 values" in {
+      test(new FPEX(FPType.FP32T, numLanes = approxLanes)) { dut =>
       val lanes = approxLanes
       initializeInterface(dut, lanes)
       val inputs = wideInputSet(seed = 1, min = -10.0f, max = 10.0f)
@@ -483,12 +495,14 @@ abstract class FPEXSpecBase extends AnyFlatSpec with ChiselScalatestTester {
       printUlpStats("FP32", diffs.toSeq)
       val avg = diffs.map(_.toDouble).sum / diffs.size.toDouble
       assert(avg < 2.0, f"average FP32 ULP $avg%.4f is not < 2.0")
+      }
     }
   }
 
 
-  it should "approximate exp for normal FP16 values" in {
-    test(new FPEX(FPType.FP16T, numLanes = approxLanes)) { dut =>
+  if (enableFP16Tests) {
+    it should "approximate exp for normal FP16 values" in {
+      test(new FPEX(FPType.FP16T, numLanes = approxLanes)) { dut =>
       val lanes = approxLanes
       initializeInterface(dut, lanes)
       val inputs = wideInputSet(seed = 2, min = -8.0f, max = 8.0f)
@@ -507,11 +521,13 @@ abstract class FPEXSpecBase extends AnyFlatSpec with ChiselScalatestTester {
       printUlpStats("FP16", diffs.toSeq)
       val avg = diffs.map(_.toDouble).sum / diffs.size.toDouble
       assert(avg < 2.0, f"average FP16 ULP $avg%.4f is not < 2.0")
+      }
     }
   }
 
-  it should "approximate exp for normal BF16 values" in {
-    test(new FPEX(FPType.BF16T, numLanes = approxLanes)) { dut =>
+  if (enableBF16Tests) {
+    it should "approximate exp for normal BF16 values" in {
+      test(new FPEX(FPType.BF16T, numLanes = approxLanes)) { dut =>
       val lanes = approxLanes
       initializeInterface(dut, lanes)
       val inputs = wideInputSet(seed = 3, min = -10.0f, max = 10.0f)
@@ -530,11 +546,13 @@ abstract class FPEXSpecBase extends AnyFlatSpec with ChiselScalatestTester {
       printUlpStats("BF16", diffs.toSeq)
       val avg = diffs.map(_.toDouble).sum / diffs.size.toDouble
       assert(avg < 2.0, f"average BF16 ULP $avg%.4f is not < 2.0")
+      }
     }
   }
 
-  it should "handle mixed special and normal lane inputs under random bombardment (FP32)" in {
-    test(new FPEX(FPType.FP32T, numLanes = 4)) { dut =>
+  if (enableFP32Tests) {
+    it should "handle mixed special and normal lane inputs under random bombardment (FP32)" in {
+      test(new FPEX(FPType.FP32T, numLanes = 4)) { dut =>
       val lanes = 4
       initializeInterface(dut, lanes)
       val rng = new Random(101)
@@ -593,11 +611,13 @@ abstract class FPEXSpecBase extends AnyFlatSpec with ChiselScalatestTester {
           laneChecks(i)(v.toLong & 0xffffffffL)
         }
       }
+      }
     }
   }
 
-  it should "handle mixed special and normal lane inputs under random bombardment (FP16)" in {
-    test(new FPEX(FPType.FP16T, numLanes = 4)) { dut =>
+  if (enableFP16Tests) {
+    it should "handle mixed special and normal lane inputs under random bombardment (FP16)" in {
+      test(new FPEX(FPType.FP16T, numLanes = 4)) { dut =>
       val lanes = 4
       initializeInterface(dut, lanes)
       val rng = new Random(102)
@@ -656,11 +676,13 @@ abstract class FPEXSpecBase extends AnyFlatSpec with ChiselScalatestTester {
           laneChecks(i)(v.toLong & 0xffffL)
         }
       }
+      }
     }
   }
 
-  it should "handle mixed special and normal lane inputs under random bombardment (BF16)" in {
-    test(new FPEX(FPType.BF16T, numLanes = 4)) { dut =>
+  if (enableBF16Tests) {
+    it should "handle mixed special and normal lane inputs under random bombardment (BF16)" in {
+      test(new FPEX(FPType.BF16T, numLanes = 4)) { dut =>
       val lanes = 4
       initializeInterface(dut, lanes)
       val rng = new Random(103)
@@ -719,11 +741,13 @@ abstract class FPEXSpecBase extends AnyFlatSpec with ChiselScalatestTester {
           laneChecks(i)(v.toLong & 0xffffL)
         }
       }
+      }
     }
   }
 
-  it should "handle partial lane masks under random mixed inputs (FP32)" in {
-    test(new FPEX(FPType.FP32T, numLanes = 4)) { dut =>
+  if (enableFP32Tests) {
+    it should "handle partial lane masks under random mixed inputs (FP32)" in {
+      test(new FPEX(FPType.FP32T, numLanes = 4)) { dut =>
       val lanes = 4
       initializeInterface(dut, lanes)
       val rng = new Random(104)
@@ -787,11 +811,13 @@ abstract class FPEXSpecBase extends AnyFlatSpec with ChiselScalatestTester {
           laneChecks(lane).foreach(check => check(v.toLong & 0xffffffffL))
         }
       }
+      }
     }
   }
 
-  it should "handle partial lane masks under random mixed inputs (FP16)" in {
-    test(new FPEX(FPType.FP16T, numLanes = 4)) { dut =>
+  if (enableFP16Tests) {
+    it should "handle partial lane masks under random mixed inputs (FP16)" in {
+      test(new FPEX(FPType.FP16T, numLanes = 4)) { dut =>
       val lanes = 4
       initializeInterface(dut, lanes)
       val rng = new Random(105)
@@ -855,11 +881,13 @@ abstract class FPEXSpecBase extends AnyFlatSpec with ChiselScalatestTester {
           laneChecks(lane).foreach(check => check(v.toLong & 0xffffL))
         }
       }
+      }
     }
   }
 
-  it should "handle partial lane masks under random mixed inputs (BF16)" in {
-    test(new FPEX(FPType.BF16T, numLanes = 4)) { dut =>
+  if (enableBF16Tests) {
+    it should "handle partial lane masks under random mixed inputs (BF16)" in {
+      test(new FPEX(FPType.BF16T, numLanes = 4)) { dut =>
       val lanes = 4
       initializeInterface(dut, lanes)
       val rng = new Random(106)
@@ -923,6 +951,7 @@ abstract class FPEXSpecBase extends AnyFlatSpec with ChiselScalatestTester {
           laneChecks(lane).foreach(check => check(v.toLong & 0xffffL))
         }
       }
+      }
     }
   }
 }
@@ -934,6 +963,21 @@ class FPEXShortSpec extends FPEXSpecBase {
   override protected def approxLanes: Int = 1
 }
 
+class FPEXShortSpecFP32 extends FPEXShortSpec {
+  override protected def enableFP16Tests: Boolean = false
+  override protected def enableBF16Tests: Boolean = false
+}
+
+class FPEXShortSpecFP16 extends FPEXShortSpec {
+  override protected def enableFP32Tests: Boolean = false
+  override protected def enableBF16Tests: Boolean = false
+}
+
+class FPEXShortSpecBF16 extends FPEXShortSpec {
+  override protected def enableFP32Tests: Boolean = false
+  override protected def enableFP16Tests: Boolean = false
+}
+
 class FPEXMediumSpec extends FPEXSpecBase {
   override protected def profileName: String = "medium"
   override protected def randomCount: Int = 100
@@ -941,9 +985,39 @@ class FPEXMediumSpec extends FPEXSpecBase {
   override protected def approxLanes: Int = 1
 }
 
+class FPEXMediumSpecFP32 extends FPEXMediumSpec {
+  override protected def enableFP16Tests: Boolean = false
+  override protected def enableBF16Tests: Boolean = false
+}
+
+class FPEXMediumSpecFP16 extends FPEXMediumSpec {
+  override protected def enableFP32Tests: Boolean = false
+  override protected def enableBF16Tests: Boolean = false
+}
+
+class FPEXMediumSpecBF16 extends FPEXMediumSpec {
+  override protected def enableFP32Tests: Boolean = false
+  override protected def enableFP16Tests: Boolean = false
+}
+
 class FPEXLongSpec extends FPEXSpecBase {
   override protected def profileName: String = "long"
   override protected def randomCount: Int = 400
   override protected def gridCount: Int = 65
   override protected def approxLanes: Int = 1
+}
+
+class FPEXLongSpecFP32 extends FPEXLongSpec {
+  override protected def enableFP16Tests: Boolean = false
+  override protected def enableBF16Tests: Boolean = false
+}
+
+class FPEXLongSpecFP16 extends FPEXLongSpec {
+  override protected def enableFP32Tests: Boolean = false
+  override protected def enableBF16Tests: Boolean = false
+}
+
+class FPEXLongSpecBF16 extends FPEXLongSpec {
+  override protected def enableFP32Tests: Boolean = false
+  override protected def enableFP16Tests: Boolean = false
 }
