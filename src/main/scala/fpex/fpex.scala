@@ -88,6 +88,7 @@ class FPEX(fpT: FPType, numLanes: Int = 4, tagWidth: Int = 1)
 
   def numIntermediateStages = 5
   val commonState = Reg(Vec(numIntermediateStages, new CommonStageState))
+  val backPressure = Wire(Vec(numIntermediateStages, Bool()))
   def st(i: Int) = commonState(i-1)
   commonState.take(1).foreach { state =>
       state.valid := io.req.fire
@@ -104,6 +105,11 @@ class FPEX(fpT: FPType, numLanes: Int = 4, tagWidth: Int = 1)
       state.laneEn := st(i).laneEn
       state.earlyTerm := maskLane(state.earlyTerm, st(i).earlyTerm, st(i).laneEn)
       state.earlyRes := maskLane(state.earlyRes, st(i).earlyRes, st(i).laneEn)
+  }
+
+  backPressure(numIntermediateStages-1) := !io.resp.ready
+  backPressure.zip(commonState).zipWithIndex.take(numIntermediateStages-1).foreach { case ((bp, st), i) =>
+      bp := st.valid && backPressure(i+1)
   }
 
   //stage 1: convert to Qmn
