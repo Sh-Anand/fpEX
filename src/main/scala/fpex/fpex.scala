@@ -40,7 +40,6 @@ class FPEX(fpT: FPType, numLanes: Int = 4, tagWidth: Int = 1)
     val resp = Decoupled(new FPEXResp(fpT.wordWidth, numLanes, tagWidth))
   })
 
-  val res = Reg(Vec(numLanes, UInt(fpT.wordWidth.W)))
   val lut = Module(new ExLUT(numLanes, fpT.lutAddrBits, fpT.lutValM, fpT.lutValN))
   val roundToRecFn = Seq.fill(numLanes)(Module(new RoundRawFNToRecFN(fpT.expWidth, fpT.sigWidth, 0)))
   val rLowBits = fpT.qmnN - fpT.lutAddrBits
@@ -157,10 +156,6 @@ class FPEX(fpT: FPType, numLanes: Int = 4, tagWidth: Int = 1)
   val resFinal = VecInit(resFN.zip(st(5).earlyTerm.zip(st(5).earlyRes)).map {
     case (res, (earlyTerminate, earlyRes)) => Mux(earlyTerminate, earlyRes, res)
   })
-  val resNext = VecInit(res.zip(resFinal).zip(st(5).laneEn).map {
-    case ((cur, nxt), en) => Mux(en && st(5).valid && !bp(5), nxt, cur)
-  })
-  res := resNext
 
   lut.io.raddrs(0) := stage2rVec.map(r => r(fpT.qmnN - 1, rLowBits))
   lut.io.raddrs(1) := stage3rVec.map { r =>
@@ -172,6 +167,6 @@ class FPEX(fpT: FPType, numLanes: Int = 4, tagWidth: Int = 1)
   io.req.ready := !backPressure(0)
   io.resp.valid := resValid
   io.resp.bits.tag := resReq.tag
-  io.resp.bits.result := res
+  io.resp.bits.result := resFinal
   io.resp.bits.laneMask := resReq.laneMask
 }
