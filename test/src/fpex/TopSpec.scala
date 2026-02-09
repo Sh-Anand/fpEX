@@ -23,44 +23,71 @@ abstract class FPEXSpecBase extends AnyFlatSpec with ChiselScalatestTester {
     exp == expMask && frac != 0
   }
 
-  private def driveAndAwait(dut: FPEX, value: Long, lanes: Int, neg: Boolean = false, maxCycles: Int = 10): Seq[BigInt] = {
+  private def initializeInterface(dut: FPEX, lanes: Int, drainCycles: Int = 8): Unit = {
+    dut.io.req.valid.poke(false.B)
+    dut.io.req.bits.neg.poke(false.B)
+    dut.io.req.bits.laneMask.poke(((1 << lanes) - 1).U)
+    for (i <- 0 until lanes) {
+      dut.io.req.bits.xVec(i).poke(0.U)
+    }
     dut.io.resp.ready.poke(true.B)
-    dut.io.req.valid.poke(true.B)
+    dut.clock.step(drainCycles)
+  }
+
+  private def driveAndAwait(dut: FPEX, value: Long, lanes: Int, neg: Boolean = false, maxCycles: Int = 64): Seq[BigInt] = {
+    dut.io.resp.ready.poke(true.B)
     dut.io.req.bits.neg.poke(neg.B)
     dut.io.req.bits.laneMask.poke(((1 << lanes) - 1).U)
     for (i <- 0 until lanes) {
       dut.io.req.bits.xVec(i).poke(value.U)
     }
-    var cycles = 0
-    while (cycles < maxCycles && !dut.io.resp.valid.peek().litToBoolean) {
+    dut.io.req.valid.poke(true.B)
+    var reqCycles = 0
+    while (reqCycles < maxCycles && !dut.io.req.ready.peek().litToBoolean) {
       dut.clock.step()
-      cycles += 1
+      reqCycles += 1
+    }
+    assert(dut.io.req.ready.peek().litToBoolean, "request was not accepted (req.ready stayed low)")
+    dut.clock.step() // issue request on req.fire
+    dut.io.req.valid.poke(false.B)
+
+    var respCycles = 0
+    while (respCycles < maxCycles && !dut.io.resp.valid.peek().litToBoolean) {
+      dut.clock.step()
+      respCycles += 1
     }
     assert(dut.io.resp.valid.peek().litToBoolean, "response did not become valid")
     val out = for (i <- 0 until lanes) yield dut.io.resp.bits.result(i).peek().litValue
     dut.clock.step() // consume response and return to READY
-    dut.io.req.valid.poke(false.B)
     out
   }
 
-  private def driveAndAwaitVec(dut: FPEX, values: Seq[Long], neg: Boolean = false, maxCycles: Int = 10): Seq[BigInt] = {
+  private def driveAndAwaitVec(dut: FPEX, values: Seq[Long], neg: Boolean = false, maxCycles: Int = 64): Seq[BigInt] = {
     val lanes = values.size
     dut.io.resp.ready.poke(true.B)
-    dut.io.req.valid.poke(true.B)
     dut.io.req.bits.neg.poke(neg.B)
     dut.io.req.bits.laneMask.poke(((1 << lanes) - 1).U)
     values.zipWithIndex.foreach { case (value, i) =>
       dut.io.req.bits.xVec(i).poke(value.U)
     }
-    var cycles = 0
-    while (cycles < maxCycles && !dut.io.resp.valid.peek().litToBoolean) {
+    dut.io.req.valid.poke(true.B)
+    var reqCycles = 0
+    while (reqCycles < maxCycles && !dut.io.req.ready.peek().litToBoolean) {
       dut.clock.step()
-      cycles += 1
+      reqCycles += 1
+    }
+    assert(dut.io.req.ready.peek().litToBoolean, "request was not accepted (req.ready stayed low)")
+    dut.clock.step() // issue request on req.fire
+    dut.io.req.valid.poke(false.B)
+
+    var respCycles = 0
+    while (respCycles < maxCycles && !dut.io.resp.valid.peek().litToBoolean) {
+      dut.clock.step()
+      respCycles += 1
     }
     assert(dut.io.resp.valid.peek().litToBoolean, "response did not become valid")
     val out = for (i <- 0 until lanes) yield dut.io.resp.bits.result(i).peek().litValue
     dut.clock.step()
-    dut.io.req.valid.poke(false.B)
     out
   }
 
@@ -163,6 +190,7 @@ abstract class FPEXSpecBase extends AnyFlatSpec with ChiselScalatestTester {
   it should "handle special cases (FP32)" in {
     test(new FPEX(FPType.FP32T, numLanes = 4)) { dut =>
       val lanes = 4
+      initializeInterface(dut, lanes)
 
       // NaN -> NaN
       val nanIn = 0x7fc00000L
@@ -220,6 +248,7 @@ abstract class FPEXSpecBase extends AnyFlatSpec with ChiselScalatestTester {
   it should "handle special cases (FP16)" in {
     test(new FPEX(FPType.FP16T, numLanes = 4)) { dut =>
       val lanes = 4
+      initializeInterface(dut, lanes)
 
       // NaN -> NaN
       val nanIn = 0x7e00L
@@ -277,6 +306,7 @@ abstract class FPEXSpecBase extends AnyFlatSpec with ChiselScalatestTester {
   it should "handle special cases (BF16)" in {
     test(new FPEX(FPType.BF16T, numLanes = 4)) { dut =>
       val lanes = 4
+      initializeInterface(dut, lanes)
 
       // NaN -> NaN
       val nanIn = 0x7fc0L
@@ -334,6 +364,7 @@ abstract class FPEXSpecBase extends AnyFlatSpec with ChiselScalatestTester {
   it should "approximate exp for normal FP32 values" in {
     test(new FPEX(FPType.FP32T, numLanes = approxLanes)) { dut =>
       val lanes = approxLanes
+      initializeInterface(dut, lanes)
       val inputs = wideInputSet(seed = 1, min = -10.0f, max = 10.0f)
       val diffs = scala.collection.mutable.ArrayBuffer.empty[Long]
       inputs.foreach { in =>
@@ -357,6 +388,7 @@ abstract class FPEXSpecBase extends AnyFlatSpec with ChiselScalatestTester {
   it should "approximate exp for normal FP16 values" in {
     test(new FPEX(FPType.FP16T, numLanes = approxLanes)) { dut =>
       val lanes = approxLanes
+      initializeInterface(dut, lanes)
       val inputs = wideInputSet(seed = 2, min = -8.0f, max = 8.0f)
       val diffs = scala.collection.mutable.ArrayBuffer.empty[Long]
       inputs.foreach { in =>
@@ -379,6 +411,7 @@ abstract class FPEXSpecBase extends AnyFlatSpec with ChiselScalatestTester {
   it should "approximate exp for normal BF16 values" in {
     test(new FPEX(FPType.BF16T, numLanes = approxLanes)) { dut =>
       val lanes = approxLanes
+      initializeInterface(dut, lanes)
       val inputs = wideInputSet(seed = 3, min = -10.0f, max = 10.0f)
       val diffs = scala.collection.mutable.ArrayBuffer.empty[Long]
       inputs.foreach { in =>
@@ -401,6 +434,7 @@ abstract class FPEXSpecBase extends AnyFlatSpec with ChiselScalatestTester {
   it should "handle mixed special and normal lane inputs under random bombardment (FP32)" in {
     test(new FPEX(FPType.FP32T, numLanes = 4)) { dut =>
       val lanes = 4
+      initializeInterface(dut, lanes)
       val rng = new Random(101)
       val nan = 0x7fc00000L
       val posInf = 0x7f800000L
@@ -463,6 +497,7 @@ abstract class FPEXSpecBase extends AnyFlatSpec with ChiselScalatestTester {
   it should "handle mixed special and normal lane inputs under random bombardment (FP16)" in {
     test(new FPEX(FPType.FP16T, numLanes = 4)) { dut =>
       val lanes = 4
+      initializeInterface(dut, lanes)
       val rng = new Random(102)
       val nan = 0x7e00L
       val posInf = 0x7c00L
@@ -525,6 +560,7 @@ abstract class FPEXSpecBase extends AnyFlatSpec with ChiselScalatestTester {
   it should "handle mixed special and normal lane inputs under random bombardment (BF16)" in {
     test(new FPEX(FPType.BF16T, numLanes = 4)) { dut =>
       val lanes = 4
+      initializeInterface(dut, lanes)
       val rng = new Random(103)
       val nan = 0x7fc0L
       val posInf = 0x7f80L
