@@ -35,42 +35,31 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 =============================================================================*/
 
-package hardfloat
+package fpex.hardfloat
 
 import chisel3._
-import consts._
+import chisel3.util._
 
-class INToRecFN(intWidth: Int, expWidth: Int, sigWidth: Int) extends RawModule
+/*----------------------------------------------------------------------------
+| In the result, no more than one of 'isNaN', 'isInf', and 'isZero' will be
+| set.
+*----------------------------------------------------------------------------*/
+object rawFloatFromRecFN
 {
-    override def desiredName = s"INToRecFN_i${intWidth}_e${expWidth}_s${sigWidth}"
-    val io = IO(new Bundle {
-        val signedIn = Input(Bool())
-        val in = Input(Bits(intWidth.W))
-        val roundingMode   = Input(UInt(3.W))
-        val detectTininess = Input(UInt(1.W))
-        val out = Output(Bits((expWidth + sigWidth + 1).W))
-        val exceptionFlags = Output(Bits(5.W))
-    })
+    def apply(expWidth: Int, sigWidth: Int, in: Bits): RawFloat =
+    {
+        val exp = in(expWidth + sigWidth - 1, sigWidth - 1)
+        val isZero    = exp(expWidth, expWidth - 2) === 0.U
+        val isSpecial = exp(expWidth, expWidth - 1) === 3.U
 
-    //------------------------------------------------------------------------
-    //------------------------------------------------------------------------
-    val intAsRawFloat = rawFloatFromIN(io.signedIn, io.in);
-
-    val roundAnyRawFNToRecFN =
-        Module(
-            new RoundAnyRawFNToRecFN(
-                    intAsRawFloat.expWidth,
-                    intWidth,
-                    expWidth,
-                    sigWidth,
-                    flRoundOpt_sigMSBitAlwaysZero | flRoundOpt_neverUnderflows
-                ))
-    roundAnyRawFNToRecFN.io.invalidExc     := false.B
-    roundAnyRawFNToRecFN.io.infiniteExc    := false.B
-    roundAnyRawFNToRecFN.io.in             := intAsRawFloat
-    roundAnyRawFNToRecFN.io.roundingMode   := io.roundingMode
-    roundAnyRawFNToRecFN.io.detectTininess := io.detectTininess
-    io.out            := roundAnyRawFNToRecFN.io.out
-    io.exceptionFlags := roundAnyRawFNToRecFN.io.exceptionFlags
+        val out = Wire(new RawFloat(expWidth, sigWidth))
+        out.isNaN  := isSpecial &&   exp(expWidth - 2)
+        out.isInf  := isSpecial && ! exp(expWidth - 2)
+        out.isZero := isZero
+        out.isSubNorm := false.B
+        out.sign   := in(expWidth + sigWidth)
+        out.sExp   := exp.zext
+        out.sig    := 0.U(1.W) ## ! isZero ## in(sigWidth - 2, 0)
+        out
+    }
 }
-

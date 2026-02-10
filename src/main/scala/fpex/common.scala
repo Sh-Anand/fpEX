@@ -2,7 +2,7 @@ package fpex
 
 import chisel3._
 import chisel3.util._
-import hardfloat.RawFloat
+import fpex.hardfloat.RawFloat
 
 object FPRoundingMode extends ChiselEnum {
   val RNE = Value("b000".U)
