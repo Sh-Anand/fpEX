@@ -5,7 +5,7 @@ This Chisel source file is part of a pre-release version of the HardFloat IEEE
 Floating-Point Arithmetic Package, by John R. Hauser (with some contributions
 from Yunsup Lee and Andrew Waterman, mainly concerning testing).
 
-Copyright 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017 The Regents of the
+Copyright 2010, 2011, 2012, 2013, 2014, 2015, 2016 The Regents of the
 University of California.  All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -35,33 +35,30 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 =============================================================================*/
 
-package hardfloat
-
+package fpex.hardfloat
 import chisel3._
+import chisel3.util._
 
-object classifyRecFN
+/*----------------------------------------------------------------------------
+| In the result, no more than one of 'isNaN', 'isInf', and 'isZero' will be
+| set.
+*----------------------------------------------------------------------------*/
+object rawFloatFromRecFN
 {
-    def apply(expWidth: Int, sigWidth: Int, in: Bits) =
+    def apply(expWidth: Int, sigWidth: Int, in: Bits): RawFloat =
     {
-        val minNormExp: BigInt = (BigInt(1)<<(expWidth - 1)) + 2
+        val exp = in(expWidth + sigWidth - 1, sigWidth - 1)
+        val isZero    = exp(expWidth, expWidth - 2) === 0.U
+        val isSpecial = exp(expWidth, expWidth - 1) === 3.U
 
-        val rawIn: RawFloat = rawFloatFromRecFN(expWidth, sigWidth, in)
-        val isSigNaN: Bool = isSigNaNRawFloat(rawIn)
-        val isFiniteNonzero: Bool = ! rawIn.isNaN && ! rawIn.isInf && ! rawIn.isZero
-        val isSubnormal: Bool = rawIn.sExp < minNormExp.S
-
-
-        (rawIn.isNaN && ! isSigNaN) ##
-        isSigNaN ##
-        (! rawIn.sign && rawIn.isInf) ##
-        (! rawIn.sign && isFiniteNonzero && ! isSubnormal) ##
-        (! rawIn.sign && isFiniteNonzero &&   isSubnormal) ##
-        (! rawIn.sign && rawIn.isZero) ##
-        (rawIn.sign   && rawIn.isZero) ##
-        (rawIn.sign   && isFiniteNonzero &&   isSubnormal) ##
-        (rawIn.sign   && isFiniteNonzero && ! isSubnormal) ##
-        (rawIn.sign   && rawIn.isInf)
-
+        val out = Wire(new RawFloat(expWidth, sigWidth))
+        out.isNaN  := isSpecial &&   exp(expWidth - 2)
+        out.isInf  := isSpecial && ! exp(expWidth - 2)
+        out.isZero := isZero
+        out.isSubNorm := false.B
+        out.sign   := in(expWidth + sigWidth)
+        out.sExp   := exp.zext
+        out.sig    := 0.U(1.W) ## ! isZero ## in(sigWidth - 2, 0)
+        out
     }
 }
-

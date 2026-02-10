@@ -5,7 +5,7 @@ This Chisel source file is part of a pre-release version of the HardFloat IEEE
 Floating-Point Arithmetic Package, by John R. Hauser (with some contributions
 from Yunsup Lee and Andrew Waterman, mainly concerning testing).
 
-Copyright 2010, 2011, 2012, 2013, 2014, 2015, 2016 The Regents of the
+Copyright 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017 The Regents of the
 University of California.  All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -35,31 +35,34 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 =============================================================================*/
 
-package hardfloat
-
+package fpex.hardfloat
 import chisel3._
 import chisel3.util._
 
-/*----------------------------------------------------------------------------
-| In the result, no more than one of 'isNaN', 'isInf', and 'isZero' will be
-| set.
-*----------------------------------------------------------------------------*/
-object rawFloatFromRecFN
+object rawFloatFromIN
 {
-    def apply(expWidth: Int, sigWidth: Int, in: Bits): RawFloat =
+    def apply(signedIn: Bool, in: Bits): RawFloat =
     {
-        val exp = in(expWidth + sigWidth - 1, sigWidth - 1)
-        val isZero    = exp(expWidth, expWidth - 2) === 0.U
-        val isSpecial = exp(expWidth, expWidth - 1) === 3.U
+        val expWidth = log2Up(in.getWidth) + 1
+//*** CHANGE THIS; CAN BE VERY LARGE:
+        val extIntWidth = 1<<(expWidth - 1)
 
-        val out = Wire(new RawFloat(expWidth, sigWidth))
-        out.isNaN  := isSpecial &&   exp(expWidth - 2)
-        out.isInf  := isSpecial && ! exp(expWidth - 2)
-        out.isZero := isZero
+        val sign = signedIn && in(in.getWidth - 1)
+        val absIn = Mux(sign, -in.asUInt, in.asUInt)
+        val extAbsIn = (0.U(extIntWidth.W) ## absIn)(extIntWidth - 1, 0)
+        val adjustedNormDist = countLeadingZeros(extAbsIn)
+        val sig =
+            (extAbsIn<<adjustedNormDist)(
+                extIntWidth - 1, extIntWidth - in.getWidth)
+
+        val out = Wire(new RawFloat(expWidth, in.getWidth))
+        out.isNaN  := false.B
+        out.isInf  := false.B
+        out.isZero := ! sig(in.getWidth - 1)
         out.isSubNorm := false.B
-        out.sign   := in(expWidth + sigWidth)
-        out.sExp   := exp.zext
-        out.sig    := 0.U(1.W) ## ! isZero ## in(sigWidth - 2, 0)
+        out.sign   := sign
+        out.sExp   := (2.U(2.W) ## ~adjustedNormDist(expWidth - 2, 0)).zext
+        out.sig    := sig
         out
     }
 }

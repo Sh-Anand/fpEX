@@ -5,7 +5,7 @@ This Chisel source file is part of a pre-release version of the HardFloat IEEE
 Floating-Point Arithmetic Package, by John R. Hauser (with some contributions
 from Yunsup Lee and Andrew Waterman, mainly concerning testing).
 
-Copyright 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017 The Regents of the
+Copyright 2010, 2011, 2012, 2013, 2014, 2015, 2016 The Regents of the
 University of California.  All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -35,35 +35,41 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 =============================================================================*/
 
-package hardfloat
-
+package fpex.hardfloat
 import chisel3._
-import chisel3.util._
+import consts._
 
-object fNFromRecFN
+class INToRecFN(intWidth: Int, expWidth: Int, sigWidth: Int) extends RawModule
 {
-    def apply(expWidth: Int, sigWidth: Int, in: Bits) =
-    {
-        val minNormExp = (BigInt(1)<<(expWidth - 1)) + 2
+    override def desiredName = s"INToRecFN_i${intWidth}_e${expWidth}_s${sigWidth}"
+    val io = IO(new Bundle {
+        val signedIn = Input(Bool())
+        val in = Input(Bits(intWidth.W))
+        val roundingMode   = Input(UInt(3.W))
+        val detectTininess = Input(UInt(1.W))
+        val out = Output(Bits((expWidth + sigWidth + 1).W))
+        val exceptionFlags = Output(Bits(5.W))
+    })
 
-        val rawIn = rawFloatFromRecFN(expWidth, sigWidth, in)
+    //------------------------------------------------------------------------
+    //------------------------------------------------------------------------
+    val intAsRawFloat = rawFloatFromIN(io.signedIn, io.in);
 
-        val isSubnormal = rawIn.sExp < minNormExp.S
-        val denormShiftDist = 1.U - rawIn.sExp(log2Up(sigWidth - 1) - 1, 0)
-        val denormFract = ((rawIn.sig>>1)>>denormShiftDist)(sigWidth - 2, 0)
-
-        val expOut =
-            Mux(isSubnormal,
-                0.U,
-                rawIn.sExp(expWidth - 1, 0) -
-                  ((BigInt(1)<<(expWidth - 1)) + 1).U
-            ) | Fill(expWidth, rawIn.isNaN || rawIn.isInf)
-        val fractOut =
-            Mux(isSubnormal,
-                denormFract,
-                Mux(rawIn.isInf, 0.U, rawIn.sig(sigWidth - 2, 0))
-            )
-        Cat(rawIn.sign, expOut, fractOut)
-    }
+    val roundAnyRawFNToRecFN =
+        Module(
+            new RoundAnyRawFNToRecFN(
+                    intAsRawFloat.expWidth,
+                    intWidth,
+                    expWidth,
+                    sigWidth,
+                    flRoundOpt_sigMSBitAlwaysZero | flRoundOpt_neverUnderflows
+                ))
+    roundAnyRawFNToRecFN.io.invalidExc     := false.B
+    roundAnyRawFNToRecFN.io.infiniteExc    := false.B
+    roundAnyRawFNToRecFN.io.in             := intAsRawFloat
+    roundAnyRawFNToRecFN.io.roundingMode   := io.roundingMode
+    roundAnyRawFNToRecFN.io.detectTininess := io.detectTininess
+    io.out            := roundAnyRawFNToRecFN.io.out
+    io.exceptionFlags := roundAnyRawFNToRecFN.io.exceptionFlags
 }
 

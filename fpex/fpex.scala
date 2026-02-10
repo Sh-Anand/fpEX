@@ -2,7 +2,7 @@ package fpex
 
 import chisel3._
 import chisel3.util._
-import hardfloat._
+import fpex.hardfloat._
 
 trait HasFPEXParams {
   def numFP16Lanes = 4

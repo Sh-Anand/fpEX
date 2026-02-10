@@ -35,35 +35,32 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 =============================================================================*/
 
-package hardfloat
-
+package fpex.hardfloat
 import chisel3._
-import chisel3.util._
 
-object rawFloatFromIN
+object classifyRecFN
 {
-    def apply(signedIn: Bool, in: Bits): RawFloat =
+    def apply(expWidth: Int, sigWidth: Int, in: Bits) =
     {
-        val expWidth = log2Up(in.getWidth) + 1
-//*** CHANGE THIS; CAN BE VERY LARGE:
-        val extIntWidth = 1<<(expWidth - 1)
+        val minNormExp: BigInt = (BigInt(1)<<(expWidth - 1)) + 2
 
-        val sign = signedIn && in(in.getWidth - 1)
-        val absIn = Mux(sign, -in.asUInt, in.asUInt)
-        val extAbsIn = (0.U(extIntWidth.W) ## absIn)(extIntWidth - 1, 0)
-        val adjustedNormDist = countLeadingZeros(extAbsIn)
-        val sig =
-            (extAbsIn<<adjustedNormDist)(
-                extIntWidth - 1, extIntWidth - in.getWidth)
+        val rawIn: RawFloat = rawFloatFromRecFN(expWidth, sigWidth, in)
+        val isSigNaN: Bool = isSigNaNRawFloat(rawIn)
+        val isFiniteNonzero: Bool = ! rawIn.isNaN && ! rawIn.isInf && ! rawIn.isZero
+        val isSubnormal: Bool = rawIn.sExp < minNormExp.S
 
-        val out = Wire(new RawFloat(expWidth, in.getWidth))
-        out.isNaN  := false.B
-        out.isInf  := false.B
-        out.isZero := ! sig(in.getWidth - 1)
-        out.isSubNorm := false.B
-        out.sign   := sign
-        out.sExp   := (2.U(2.W) ## ~adjustedNormDist(expWidth - 2, 0)).zext
-        out.sig    := sig
-        out
+
+        (rawIn.isNaN && ! isSigNaN) ##
+        isSigNaN ##
+        (! rawIn.sign && rawIn.isInf) ##
+        (! rawIn.sign && isFiniteNonzero && ! isSubnormal) ##
+        (! rawIn.sign && isFiniteNonzero &&   isSubnormal) ##
+        (! rawIn.sign && rawIn.isZero) ##
+        (rawIn.sign   && rawIn.isZero) ##
+        (rawIn.sign   && isFiniteNonzero &&   isSubnormal) ##
+        (rawIn.sign   && isFiniteNonzero && ! isSubnormal) ##
+        (rawIn.sign   && rawIn.isInf)
+
     }
 }
+
