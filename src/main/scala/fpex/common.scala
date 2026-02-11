@@ -66,9 +66,19 @@ sealed trait FPType {
     val expBias = (1 << expWidth).S((expWidth + 2).W)
     out.sExp := k + expBias
 
-    val shift = (lutValN - (sigWidth - 1)).asSInt
-    val sigMag = Mux(shift < 0.S, qmn << (-shift).asUInt, qmn >> shift.asUInt)
-    out.sig := Cat(0.U(1.W), sigMag(sigWidth - 1, 0), 0.U(2.W))
+    val shiftAmt = lutValN - (sigWidth - 1)
+    if (shiftAmt >= 2) {
+      // Preserve guard/round/sticky information so downstream HardFloat
+      // rounding can produce correctly rounded results.
+      val sigWithGR = qmn >> (shiftAmt - 2)
+      val sticky = if (shiftAmt > 2) qmn(shiftAmt - 3, 0).orR else false.B
+      val preSig = Cat(0.U(1.W), sigWithGR(sigWidth + 1, 0))
+      out.sig := Mux(sticky, preSig | 1.U((sigWidth + 3).W), preSig)
+    } else {
+      val shift = (lutValN - (sigWidth - 1)).asSInt
+      val sigMag = Mux(shift < 0.S, qmn << (-shift).asUInt, qmn >> shift.asUInt)
+      out.sig := Cat(0.U(1.W), sigMag(sigWidth - 1, 0), 0.U(2.W))
+    }
     out
   }
 }
